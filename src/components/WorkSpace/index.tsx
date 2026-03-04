@@ -1,10 +1,11 @@
 import { useWorkSpace } from "@/store/kanban"
 import { Button } from "../ui/button";
 import { Link } from "react-router-dom";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "../ui/alert-dialog";
+import { RenameDialog } from "../items/RenameDialog";
+import { DeleteDialog } from "../items/DeleteDialog";
 
 export const WorkSpace = () => {
-    const { workspaces, deleteWorkSpace, setWorkSpace } = useWorkSpace();
+    const { workspaces, deleteWorkSpace, setWorkSpace, RenameWorkSpace } = useWorkSpace();
     return (
         <>
             {workspaces.map(workspace => (
@@ -18,8 +19,8 @@ export const WorkSpace = () => {
                         {/* </div> */}
                     </Button>
 
-                    <div className="">
-                        <AlertDialog>
+                    <div>
+                        {/* <AlertDialog>
                             <AlertDialogTrigger>
                                 <Button className="text-red-400" >删除</Button>
                             </AlertDialogTrigger>
@@ -36,9 +37,16 @@ export const WorkSpace = () => {
                                         deleteWorkSpace(workspace.workspaceId)}>确认执行删除</AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
-
-
-                        </AlertDialog>
+                        </AlertDialog> */}
+                        <DeleteDialog
+                            title="确定要删除工作区吗?"
+                            description={`此操作将永久删除 "${workspace.workspaceName}" 及其所有关联的任务数据。`}
+                            onConfirm={() => deleteWorkSpace(workspace.workspaceId)}
+                        />
+                        <RenameDialog
+                            initialName={workspace.workspaceName}
+                            title="重命名"
+                            onConfirm={(newName) => RenameWorkSpace(workspace.workspaceId, newName)} />
                     </div>
 
                 </div >
@@ -47,3 +55,4 @@ export const WorkSpace = () => {
         </>
     )
 }
+

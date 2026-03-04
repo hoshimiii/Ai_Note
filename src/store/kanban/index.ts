@@ -31,6 +31,7 @@ type WorkSpace = {
 interface WorkSpaceProps {
     workspaces: WorkSpace[],
     activeWorkSpaceId: string | null,
+    activeMissionId: string | null,
 
     missions: Record<string, Mission>,
     boards: Record<string, Board>,
@@ -39,6 +40,12 @@ interface WorkSpaceProps {
     createWorkSpace: (WorkSpace: WorkSpace) => void,
     setWorkSpace: (WorkSpaceId: string) => void,
     deleteWorkSpace: (WorkSpaceId: string) => void,
+    RenameWorkSpace: (WorkSpaceId: string, newName: string) => void
+
+    createMission: (Mission: Mission) => void,
+    setMission: (MissionId: string) => void,
+    deleteMission: (MissionId: string) => void,
+    RenameMission: (MissionId: string, newName: string) => void,
 }
 
 
@@ -47,6 +54,7 @@ export const useWorkSpace = create<WorkSpaceProps>()(
         (set, get) => ({
             workspaces: [],
             activeWorkSpaceId: null,
+            activeMissionId: null,
             missions: {},
             boards: {},
             tasks: {},
@@ -58,7 +66,7 @@ export const useWorkSpace = create<WorkSpaceProps>()(
 
             setWorkSpace: (workspaceId) => {
                 set({ activeWorkSpaceId: workspaceId });
-                
+
             },
             deleteWorkSpace: (workspaceId) => {
                 set((state) => {
@@ -73,7 +81,29 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                         activeWorkSpaceId: nextActiveId
                     };
                 });
-            }
+            },
+            RenameWorkSpace: (workspaceId, newName) => {
+                set((state) => ({
+                    workspaces: state.workspaces.map((w) =>
+                        w.workspaceId === workspaceId ? { ...w, workspaceName: newName } : w
+                    )
+                }));
+            },
+
+            createMission: (mission) => {
+                set((state) => ({ missions: { ...state.missions, [mission.MissionId]: mission } }));
+            },
+            setMission: (missionId) => {
+                set({ activeMissionId: missionId });
+            },
+            deleteMission: (missionId) => {
+                set((state) => ({ missions: Object.fromEntries(Object.entries(state.missions).filter(([id]) => id !== missionId)) }));
+            },
+            RenameMission: (missionId, newName) => {
+                set((state) => ({ missions: { ...state.missions, [missionId]: { ...state.missions[missionId], title: newName } } }));
+            },
+
+
         }),
         { name: 'workspace-storage' }
 

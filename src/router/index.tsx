@@ -1,4 +1,5 @@
 
+import { WorkPage } from "@/pages/workPage"
 import { WorkSpacePage } from "@/pages/workspacesPage"
 import { createBrowserRouter } from "react-router"
 
@@ -13,7 +14,7 @@ const routes = [
     },
     {
         path: "/work",
-        element: <div>workPage</div>
+        element: <WorkPage />
     }
 ]
 
