@@ -10,7 +10,7 @@ import { Mission } from "@/components/Mission";
 
 
 export const WorkPage = () => {
-    const { workspaces, activeWorkSpaceId, activeMissionId, missions, boards, tasks, createMission, setMission, deleteMission, RenameMission } = useWorkSpace();
+    const { workspaces, activeWorkSpaceId, activeMissionId, missions, boards, tasks, setWorkSpace, createMission, setMission, deleteMission, RenameMission } = useWorkSpace();
     const navigate = useNavigate();
 
     const activeMissions = Object.values(missions).filter((mission) => mission.WorkSpaceId === activeWorkSpaceId);
@@ -27,7 +27,7 @@ export const WorkPage = () => {
                     <SidebarHeader> {workspaces.find(workspace => workspace.workspaceId === activeWorkSpaceId)?.workspaceName}</SidebarHeader>
                     <Button
                         variant="outline"
-                        onClick={() => navigate('/workspace')}
+                        onClick={() => {setMission(null), setWorkSpace(null), navigate('/workspace')}}
                         className="cursor-pointer mx-4 mb-2"
                     >
                         返回工作区

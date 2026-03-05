@@ -13,14 +13,13 @@ type Board = {
     BoardId: string,
     MissionId: string,
     title: string,
+    Tasks: Task[],
     // Tasks: Task[]
 
 }
 type Task = {
     TaskId: string,
-    BoardId: string,
     title: string,
-    status: boolean
 }
 
 type WorkSpace = {
@@ -38,14 +37,23 @@ interface WorkSpaceProps {
     tasks: Record<string, Task>,
 
     createWorkSpace: (WorkSpace: WorkSpace) => void,
-    setWorkSpace: (WorkSpaceId: string) => void,
+    setWorkSpace: (WorkSpaceId: string | null) => void,
     deleteWorkSpace: (WorkSpaceId: string) => void,
     RenameWorkSpace: (WorkSpaceId: string, newName: string) => void
 
     createMission: (Mission: Mission) => void,
-    setMission: (MissionId: string) => void,
+    setMission: (MissionId: string | null) => void,
     deleteMission: (MissionId: string) => void,
     RenameMission: (MissionId: string, newName: string) => void,
+
+    createBoard: (Board: Board) => void,
+    deleteBoard: (BoardId: string) => void,
+    RenameBoard: (BoardId: string, newName: string) => void,
+    updataBoard: (BoardId: string, newTask: Task[]) => void,
+
+    createTask: (Task: Task) => void,
+    deleteTask: (TaskId: string) => void,
+    RenameTask: (TaskId: string, newName: string) => void,
 }
 
 
@@ -90,6 +98,7 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                 }));
             },
 
+
             createMission: (mission) => {
                 set((state) => ({ missions: { ...state.missions, [mission.MissionId]: mission } }));
             },
@@ -104,6 +113,28 @@ export const useWorkSpace = create<WorkSpaceProps>()(
             },
 
 
+            createBoard: (board) => {
+                set((state) => ({ boards: { ...state.boards, [board.BoardId]: board } }));
+            },
+            deleteBoard: (boardId) => {
+                set((state) => ({ boards: Object.fromEntries(Object.entries(state.boards).filter(([id]) => id !== boardId)) }));
+            },
+            RenameBoard: (boardId, newName) => {
+                set((state) => ({ boards: { ...state.boards, [boardId]: { ...state.boards[boardId], title: newName } } }));
+            },
+            updataBoard: (boardId, newTask) => {
+                set((state) => ({ boards: { ...state.boards, [boardId]: { ...state.boards[boardId], Tasks: newTask } } }));
+            },
+            
+            createTask: (task) => {
+                set((state) => ({ tasks: { ...state.tasks, [task.TaskId]: task } }));
+            },
+            deleteTask: (taskId) => {
+                set((state) => ({ tasks: Object.fromEntries(Object.entries(state.tasks).filter(([id]) => id !== taskId)) }));
+            },
+            RenameTask: (taskId, newName) => {
+                set((state) => ({ tasks: { ...state.tasks, [taskId]: { ...state.tasks[taskId], title: newName } } }));
+            },
         }),
         { name: 'workspace-storage' }
 
