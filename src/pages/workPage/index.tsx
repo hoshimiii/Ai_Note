@@ -3,81 +3,167 @@ import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuAction,
 import { Outlet, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { DeleteDialog } from "@/components/items/DeleteDialog";
-import { PencilIcon, TrashIcon } from "lucide-react";
+import { Hand, PencilIcon, TrashIcon } from "lucide-react";
 import { RenameDialog } from "@/components/items/RenameDialog";
-import { Mission } from "@/components/Mission";
+// import { Mission } from "@/components/Mission";
+import { DndContext, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
+import { MainPage } from "../mainPage";
+import { MissionItem } from "@/components/Mission";
+import { cn } from "@/lib/utils";
+import { useRef, useState } from "react";
 
 
 
 export const WorkPage = () => {
-    const { workspaces, activeWorkSpaceId, activeMissionId, missions, boards, tasks, setWorkSpace, createMission, setMission, deleteMission, RenameMission } = useWorkSpace();
+    const { workspaces, activeWorkSpaceId, activeMissionId, missions,
+        setWorkSpace,
+        createMission, setMission, deleteMission, RenameMission,
+        moveTask,
+    } = useWorkSpace();
     const navigate = useNavigate();
 
     const activeMissions = Object.values(missions).filter((mission) => mission.WorkSpaceId === activeWorkSpaceId);
-    // const nowMission = Object.values(missions).find((mission) => mission.MissionId === activeMissionId);
+
+    // 用 useRef 保存跨渲染的可变值，用 useState 驱动 UI 更新
+    const currentHoverIdRef = useRef<string | null>(null);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const preMissionIdRef = useRef<string | null>(null);
+    const [isPreviewing, setIsPreviewing] = useState(false);
+
+    const HandleDragStart = (event: DragStartEvent) => {
+        const { active } = event;
+        if (active.data.current?.type === 'task') {
+            // 记录拖拽开始时的 Mission，供恢复用
+            preMissionIdRef.current = activeMissionId;
+        }
+    };
+
+    const HandleDragOver = (event: DragOverEvent) => {
+        const { over } = event;
+
+        // 进入 board 区域：恢复清晰，方便确认放置位置
+        if (over?.data.current?.type === 'board') {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+                timerRef.current = null;
+                currentHoverIdRef.current = null;
+            }
+            setIsPreviewing(false);
+            return;
+        }
+
+        // 不在任何可放置区域，或不在 mission 上：清除计时器
+        if (!over || over.data.current?.type !== 'mission') {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+                timerRef.current = null;
+                currentHoverIdRef.current = null;
+            }
+            return;
+        }
+
+        const overId = over.id as string;
+
+        if (overId !== currentHoverIdRef.current) {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            currentHoverIdRef.current = overId;
+
+            // 停留 500ms 后切换预览 Mission
+            timerRef.current = setTimeout(() => {
+                setMission(overId);
+                setIsPreviewing(true);
+            }, 500);
+        }
+    };
+
+    const HandleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        // 清理悬停计时器
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+        currentHoverIdRef.current = null;
+
+        if (over && over.data.current?.type === 'board') {
+            const [, ABId, ATId] = String(active.id).split('+');
+            const [, OBId] = String(over.id).split('+');
+            moveTask(ATId, ABId, OBId);
+        } else {
+            // 未落到 board，恢复原 Mission
+            setMission(preMissionIdRef.current);
+        }
+
+        setIsPreviewing(false);
+        preMissionIdRef.current = null;
+    };
+
     return (
         <div>
             <SidebarProvider>
-                {/* 这里SidebarProvider的作用是什么： SidebarProvider是用来提供Sidebar的，也就是提供Sidebar的上下文，也就是提供Sidebar的上下文 */}
-                <Sidebar side="left">
-                    {/* 这里main作用是什么： main是用来包裹被渲染的组件的，也就是被渲染的组件会在这个main里面 */}
-                    {/* 这里SidebarTrigger的作用是什么： SidebarTrigger是用来触发Sidebar的，也就是点击SidebarTrigger会触发Sidebar的打开和关闭 */}
-                    {/* 这里SidebarHeader的作用是什么： SidebarHeader是用来显示Sidebar的标题的，也就是显示当前工作区的名称 */}
+                <DndContext
+                    onDragStart={HandleDragStart}
+                    onDragEnd={HandleDragEnd}
+                    onDragOver={HandleDragOver}
+                >
+                    {/* 这里SidebarProvider的作用是什么： SidebarProvider是用来提供Sidebar的，也就是提供Sidebar的上下文，也就是提供Sidebar的上下文 */}
+                    <Sidebar side="left">
+                        <SidebarHeader> {workspaces.find(workspace => workspace.workspaceId === activeWorkSpaceId)?.workspaceName}</SidebarHeader>
+                        <Button
+                            variant="outline"
+                            onClick={() => { setMission(null), setWorkSpace(null), navigate('/workspace') }}
+                            className="cursor-pointer mx-4 mb-2"
+                        >
+                            返回工作区
+                        </Button>
 
-                    <SidebarHeader> {workspaces.find(workspace => workspace.workspaceId === activeWorkSpaceId)?.workspaceName}</SidebarHeader>
-                    <Button
-                        variant="outline"
-                        onClick={() => {setMission(null), setWorkSpace(null), navigate('/workspace')}}
-                        className="cursor-pointer mx-4 mb-2"
-                    >
-                        返回工作区
-                    </Button>
+                        <SidebarContent>
+                            <Button className="cursor-pointer" variant="outline" onClick={() => createMission({
+                                MissionId: crypto.randomUUID(),
+                                WorkSpaceId: activeWorkSpaceId || '',
+                                title: 'New Mission'
+                            })}>New Mission</Button>
+                            <SidebarMenu>
+                                {activeMissions.map((mission) => (
+                                    <SidebarMenuItem className="group/menu-item flex bg-gray-100 rounded-md p-1 " key={mission.MissionId}>
+                                        <SidebarMenuButton className="cursor-pointer w-[70%]" variant="default" onClick={() => setMission(mission.MissionId)}>
+                                            <MissionItem MissionId={mission.MissionId} WorkSpaceId={mission.WorkSpaceId} title={mission.title} />
+                                        </SidebarMenuButton>
+                                        <SidebarMenuAction asChild>
+                                            <DeleteDialog
+                                                title="确定要删除任务吗?"
+                                                description="此操作无法撤销，相关数据将永久消失"
+                                                onConfirm={() => deleteMission(mission.MissionId)}
+                                                trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><TrashIcon className="w-4 h-4 text-red-500" /></Button>} />
 
-                    <SidebarContent>
-                        <Button className="cursor-pointer" variant="outline" onClick={() => createMission({
-                            MissionId: crypto.randomUUID(),
-                            WorkSpaceId: activeWorkSpaceId || '',
-                            title: 'New Mission'
-                        })}>New Mission</Button>
-                        <SidebarMenu>
-                            {activeMissions.map((mission) => (
-                                <SidebarMenuItem className="group/menu-item flex bg-gray-100 rounded-md p-1 " key={mission.MissionId}>
-                                    <SidebarMenuButton className="cursor-pointer w-[70%]" variant="default" onClick={() => setMission(mission.MissionId)}>
-                                        {mission.title}
-                                    </SidebarMenuButton>
-                                    <SidebarMenuAction asChild>
-                                        <DeleteDialog
-                                            title="确定要删除任务吗?"
-                                            description="此操作无法撤销，相关数据将永久消失"
-                                            onConfirm={() => deleteMission(mission.MissionId)}
-                                            trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><TrashIcon className="w-4 h-4 text-red-500" /></Button>} />
+                                        </SidebarMenuAction>
+                                        <SidebarMenuAction asChild>
+                                            <RenameDialog
+                                                title="重命名?"
+                                                initialName={mission.title}
+                                                onConfirm={(newName) => RenameMission(mission.MissionId, newName)}
+                                                trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><PencilIcon className="w-4 h-4 text-blue-500" /></Button>} />
+                                        </SidebarMenuAction>
 
-                                    </SidebarMenuAction>
-                                    <SidebarMenuAction asChild>
-                                        <RenameDialog
-                                            title="重命名?"
-                                            initialName={mission.title}
-                                            onConfirm={(newName) => RenameMission(mission.MissionId, newName)}
-                                            trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><PencilIcon className="w-4 h-4 text-blue-500" /></Button>} />
-                                    </SidebarMenuAction>
-
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarContent>
+                                    </SidebarMenuItem>
+                                ))}
+                            </SidebarMenu>
+                        </SidebarContent>
 
 
 
-                </Sidebar>
+                    </Sidebar>
 
-                <main className="flex-1 w-full">
-                    <SidebarTrigger className="bg-gray-200 w-[20px] h-[20px]" />
-                    <Mission nowMissionId={activeMissionId} />
-                    <Outlet />
-                    {/* outlet的作用是什么： outlet渲染子组件需不需要包含住被渲染的组件？ 是的，outlet渲染子组件需要包含住被渲染的组件。
+                    <main className={cn("flex-1 w-full transition-all duration-200", isPreviewing ? "opacity-50 scale-100 blur-in-sm" : "opacity-100 scale-100 blur-0")}>
+                        <SidebarTrigger className="bg-gray-200 w-[20px] h-[20px]" />
+                        <MainPage nowMissionId={activeMissionId} />
+                        <Outlet />
+                        {/* outlet的作用是什么： outlet渲染子组件需不需要包含住被渲染的组件？ 是的，outlet渲染子组件需要包含住被渲染的组件。
                     那这里为什么用<Outlet />的形式 */}
-                </main>
+                    </main>
+                </DndContext>
             </SidebarProvider>
-        </div>
+        </div >
     )
 }

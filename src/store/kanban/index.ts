@@ -17,6 +17,7 @@ type Board = {
     // Tasks: Task[]
 
 }
+
 type Task = {
     TaskId: string,
     title: string,
@@ -50,10 +51,12 @@ interface WorkSpaceProps {
     deleteBoard: (BoardId: string) => void,
     RenameBoard: (BoardId: string, newName: string) => void,
     updataBoard: (BoardId: string, newTask: Task[]) => void,
+    moveBoard: (boardId: string, sourceMissionId: string, targetMissionId: string) => void,
 
     createTask: (Task: Task) => void,
-    deleteTask: (TaskId: string) => void,
-    RenameTask: (TaskId: string, newName: string) => void,
+    deleteTask: (BoardId:string, TaskId: string) => void,
+    RenameTask: (BoardId:string, TaskId: string, newName: string) => void,
+    moveTask: (taskId: string, sourceBoardId: string, targetBoardId: string) => void,
 }
 
 
@@ -125,15 +128,57 @@ export const useWorkSpace = create<WorkSpaceProps>()(
             updataBoard: (boardId, newTask) => {
                 set((state) => ({ boards: { ...state.boards, [boardId]: { ...state.boards[boardId], Tasks: newTask } } }));
             },
-            
+            moveBoard: (boardId, sourceMissionId, targetMissionId) => {
+                set((state) => {
+                    if (sourceMissionId === targetMissionId) return state;
+                    const sourceMission = state.missions[sourceMissionId];
+                    const targetMission = state.missions[targetMissionId];
+                    if (!sourceMission || !targetMission) return state;
+                    const board = state.boards[boardId];
+                    if (!board) return state;
+                    return {
+                        boards: {
+                            ...state.boards,
+                            [boardId]: {
+                                ...board,
+                                MissionId: targetMissionId
+                            }
+                        }
+                    };
+                });
+            },
+
             createTask: (task) => {
                 set((state) => ({ tasks: { ...state.tasks, [task.TaskId]: task } }));
             },
-            deleteTask: (taskId) => {
-                set((state) => ({ tasks: Object.fromEntries(Object.entries(state.tasks).filter(([id]) => id !== taskId)) }));
+            deleteTask: (boardId ,taskId) => {
+                set((state) => ({ boards: { ...state.boards, [boardId]: { ...state.boards[boardId], Tasks: state.boards[boardId].Tasks.filter(t => t.TaskId !== taskId) } } }));
             },
-            RenameTask: (taskId, newName) => {
-                set((state) => ({ tasks: { ...state.tasks, [taskId]: { ...state.tasks[taskId], title: newName } } }));
+            RenameTask: (boardId, taskId, newName) => {
+                set((state) => ({ boards: { ...state.boards, [boardId]: { ...state.boards[boardId], Tasks: state.boards[boardId].Tasks.map(t => t.TaskId === taskId ? { ...t, title: newName } : t) } } }));
+            },
+            moveTask: (taskId, sourceBoardId, targetBoardId) => {
+                set((state) => {
+                    if (sourceBoardId === targetBoardId) return state;
+                    const sourceBoard = state.boards[sourceBoardId];
+                    const targetBoard = state.boards[targetBoardId];
+                    if (!sourceBoard || !targetBoard) return state;
+                    const task = sourceBoard.Tasks.find(t => t.TaskId === taskId);
+                    if (!task) return state;
+                    return {
+                        boards: {
+                            ...state.boards,
+                            [sourceBoardId]: {
+                                ...sourceBoard,
+                                Tasks: sourceBoard.Tasks.filter(t => t.TaskId !== taskId)
+                            },
+                            [targetBoardId]: {
+                                ...targetBoard,
+                                Tasks: [...targetBoard.Tasks, task]
+                            }
+                        }
+                    };
+                });
             },
         }),
         { name: 'workspace-storage' }
