@@ -11,6 +11,8 @@ import { MainPage } from "../mainPage";
 import { MissionItem } from "@/components/Mission";
 import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
+import { generateRandomId } from "@/components/utils/RandomGenerator";
+import { ChatController } from "@/components/ChatBot/ChatBotWindow";
 
 
 
@@ -120,7 +122,7 @@ export const WorkPage = () => {
 
                         <SidebarContent>
                             <Button className="cursor-pointer" variant="outline" onClick={() => createMission({
-                                MissionId: crypto.randomUUID(),
+                                MissionId: generateRandomId(),
                                 WorkSpaceId: activeWorkSpaceId || '',
                                 title: 'New Mission'
                             })}>New Mission</Button>
@@ -158,6 +160,7 @@ export const WorkPage = () => {
                     <main className={cn("flex-1 w-full transition-all duration-200", isPreviewing ? "opacity-50 scale-100 blur-in-sm" : "opacity-100 scale-100 blur-0")}>
                         <SidebarTrigger className="bg-gray-200 w-[20px] h-[20px]" />
                         <MainPage nowMissionId={activeMissionId} />
+                        <ChatController />
                         <Outlet />
                         {/* outlet的作用是什么： outlet渲染子组件需不需要包含住被渲染的组件？ 是的，outlet渲染子组件需要包含住被渲染的组件。
                     那这里为什么用<Outlet />的形式 */}

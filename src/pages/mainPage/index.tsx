@@ -2,6 +2,7 @@ import { useWorkSpace } from "@/store/kanban";
 import { Board } from "../../components/Board";
 import { Button } from "../../components/ui/button";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { generateRandomId } from "@/components/utils/RandomGenerator";
 
 
 export const MainPage = (
@@ -34,7 +35,7 @@ export const MainPage = (
                         <div className="flex flex-wrap w-[80vw]">
                             <Board nowMissionId={nowMissionId ?? ''} />
                             <Button className="cursor-pointer" variant="outline" onClick={() => createBoard({
-                                BoardId: crypto.randomUUID(),
+                                BoardId: generateRandomId(),
                                 MissionId: nowMissionId ?? '',
                                 title: '未开始',
                                 Tasks: []

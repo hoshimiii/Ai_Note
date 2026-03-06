@@ -1,13 +1,11 @@
 import { useWorkSpace } from "@/store/kanban";
-// import { Task } from "./Task";
-import { DndContext, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
-// import { KanbanGroup } from "./KanbanGroup";
 import { Button } from "../ui/button";
 import { DeleteDialog } from "../items/DeleteDialog";
 import { RenameDialog } from "../items/RenameDialog";
 import { PencilIcon, TrashIcon } from "lucide-react";
 import { Task } from "./Task";
 import { BoardItem } from "./BoardItem";
+import { generateRandomId } from "../utils/RandomGenerator";
 
 
 
@@ -67,7 +65,7 @@ export const Board = ({ nowMissionId }: { nowMissionId: string }) => {
                                 </div>
                             ))}
                             <Button variant="outline" onClick={() => updataBoard(board.BoardId, [...board.Tasks, {
-                                TaskId: crypto.randomUUID(),
+                                TaskId: generateRandomId(),
                                 title: 'New Task',
                             }])}>New Task</Button>
                         </BoardItem>
