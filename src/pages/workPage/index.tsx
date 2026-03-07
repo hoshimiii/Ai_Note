@@ -157,7 +157,7 @@ export const WorkPage = () => {
 
                     </Sidebar>
 
-                    <main className={cn("flex-1 w-full transition-all duration-200", isPreviewing ? "opacity-50 scale-100 blur-in-sm" : "opacity-100 scale-100 blur-0")}>
+                    <main className={cn("flex-1 w-full transition-all duration-200", isPreviewing ? "opacity-50 scale-95 blur-in-sm" : "opacity-100 scale-95 blur-0")}>
                         <SidebarTrigger className="bg-gray-200 w-[20px] h-[20px]" />
                         <MainPage nowMissionId={activeMissionId} />
                         <ChatController />
