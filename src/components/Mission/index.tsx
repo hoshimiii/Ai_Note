@@ -1,9 +1,11 @@
 import { useDroppable } from "@dnd-kit/core"
+import { type Note as NoteType } from "@/store/kanban";
 
 interface MissionItemProps {
     MissionId: string,
     WorkSpaceId: string
     title: string,
+    Notes: NoteType[],
 }
 
 export const MissionItem = ({ MissionId, WorkSpaceId, title }: MissionItemProps) => {
