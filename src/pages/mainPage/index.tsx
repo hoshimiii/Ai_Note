@@ -1,18 +1,16 @@
 import { useWorkSpace } from "@/store/kanban";
 import { Board } from "../../components/Board";
 import { Button } from "../../components/ui/button";
-import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { generateRandomId } from "@/components/utils/RandomGenerator";
 import { Note } from "@/components/Note";
 import { type Note as NoteType } from "@/store/kanban";
+import { useNavigate } from "react-router";
 
 export const MainPage = (
     { nowMissionId, nowNoteId, Note_item }: { nowMissionId: string | null, nowNoteId: string | null, Note_item: NoteType }
 ) => {
-    //此时传入的nowMissionId是activeMissionId 是一个对象吗？ 不是，是一个字符串 
-    // const { boards, tasks } = useWorkSpace();    
-    const { createBoard, moveTask } = useWorkSpace();
-
+    const { createBoard, setActiveNote } = useWorkSpace();
+    const navigate = useNavigate();
     return (
 
         <div >
@@ -25,7 +23,7 @@ export const MainPage = (
                     <>
                         MISSIONID:{nowMissionId}
                         <div className="flex flex-wrap w-[80vw]">
-                            <Board nowMissionId={nowMissionId ?? ''} />
+                            <Board nowMissionId={nowMissionId ?? ''} setActiveNoteId={(noteId) => { setActiveNote(nowMissionId ?? '', noteId); navigate('/work'); }} />
                             <Button className="cursor-pointer" variant="outline" onClick={() => createBoard({
                                 BoardId: generateRandomId(),
                                 MissionId: nowMissionId ?? '',

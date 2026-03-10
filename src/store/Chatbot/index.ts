@@ -83,19 +83,6 @@ export const useChatbot = create<ChatbotProps>()(
             },
             getresponse: async (messages, usertoken, baseurl) => {
                 const response = await sendMessage(messages, usertoken, baseurl, get().chatbotModel)
-
-                // 非流式传输
-                // set({
-                //     messages: [...get().messages, {
-                //         messageId: generateRandomId(),
-                //         messageContent: chunk.choices[0].message.content,
-                //         role: 'chatbot',
-                //         messageCreatedAt: new Date().toISOString(),
-                //         messageTimestamp: Date.now(),
-                //     }]
-                // });
-                // return response
-
                 //流式传输
                 const reader = response.body?.getReader();
                 const decoder = new TextDecoder();

@@ -22,7 +22,7 @@ export type Note = {
     blocks: Block[];
 }
 
-type Block = {
+export type Block = {
     blockId: string;
     blockType: string;
     blockContent: string;
@@ -39,9 +39,10 @@ type Board = {
 
 }
 
-type Task = {
+export type Task = {
     TaskId: string,
     title: string,
+    linkedNoteIds: string,
 }
 
 type WorkSpace = {
@@ -83,6 +84,7 @@ interface WorkSpaceProps {
     deleteTask: (BoardId: string, TaskId: string) => void,
     RenameTask: (BoardId: string, TaskId: string, newName: string) => void,
     moveTask: (taskId: string, sourceBoardId: string, targetBoardId: string) => void,
+    setLinkedNoteIds: (boardId: string, taskId: string, linkedNoteIds: string) => void,
 
     setActiveNote: (activeMissionId: string, noteId: string | null) => void,
     createNote: (activeMissionId: string, newNote: Note) => Note,
@@ -90,10 +92,10 @@ interface WorkSpaceProps {
     RenameNote: (activeMissionId: string, noteId: string, newName: string) => void,
     updateNote: (activeMissionId: string, noteId: string, newNote: Note) => void,
 
-    createBlock: (activeMissionId: string, noteId: string, newBlock: Block) => Block,
-    deleteBlock: (activeMissionId: string, noteId: string, blockId: string) => void,
-    RenameBlock: (activeMissionId: string, noteId: string, blockId: string, newName: string) => void,
-    updateBlock: (activeMissionId: string, noteId: string, blockId: string, newBlock: Block) => void,
+    createBlock: (note: Note, newBlock: Block) => Block,
+    deleteBlock: (note: Note, blockId: string) => void,
+    RenameBlock: (note: Note, blockId: string, newName: string) => void,
+    updateBlock: (note: Note, blockId: string, newBlock: Block) => void,
 }
 
 
@@ -236,7 +238,9 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                     };
                 });
             },
-
+            setLinkedNoteIds: (boardId, taskId, linkedNoteIds) => {
+               set((state) => ({ boards: { ...state.boards, [boardId]: { ...state.boards[boardId], Tasks: state.boards[boardId].Tasks.map(t => t.TaskId === taskId ? { ...t, linkedNoteIds } : t) } } }));
+            },
             createNote: (activeMissionId, note) => {
                 set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: [...state.missions[activeMissionId].Notes, note] } } }));
                 return note;
@@ -251,18 +255,95 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                 set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: state.missions[activeMissionId].Notes.map(n => n.noteId === noteId ? { ...n, ...newNote } : n) } } }));
             },
 
-            createBlock: (activeMissionId, noteId, newBlock) => {
-                set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: state.missions[activeMissionId].Notes.map(n => n.noteId === noteId ? { ...n, blocks: [...n.blocks, newBlock] } : n) } } }));
+            createBlock: (note, newBlock) => {
+                set((state) => {
+                    const missionId = Object.keys(state.missions).find(id =>
+                        state.missions[id].Notes.some(n => n.noteId === note.noteId)
+                    );
+                    if (!missionId) return state;
+                    const mission = state.missions[missionId];
+                    return {
+                        missions: {
+                            ...state.missions,
+                            [missionId]: {
+                                ...mission,
+                                Notes: mission.Notes.map(n =>
+                                    n.noteId === note.noteId
+                                        ? { ...n, blocks: [...n.blocks, newBlock] }
+                                        : n
+                                )
+                            }
+                        }
+                    };
+                });
                 return newBlock;
             },
-            deleteBlock: (activeMissionId, noteId, blockId) => {
-                set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: state.missions[activeMissionId].Notes.map(n => n.noteId === noteId ? { ...n, blocks: n.blocks.filter(b => b.blockId !== blockId) } : n) } } }));
+            deleteBlock: (note, blockId) => {
+                set((state) => {
+                    const missionId = Object.keys(state.missions).find(id =>
+                        state.missions[id].Notes.some(n => n.noteId === note.noteId)
+                    );
+                    if (!missionId) return state;
+                    const mission = state.missions[missionId];
+                    return {
+                        missions: {
+                            ...state.missions,
+                            [missionId]: {
+                                ...mission,
+                                Notes: mission.Notes.map(n =>
+                                    n.noteId === note.noteId
+                                        ? { ...n, blocks: n.blocks.filter(b => b.blockId !== blockId) }
+                                        : n
+                                )
+                            }
+                        }
+                    };
+                });
             },
-            RenameBlock: (activeMissionId, noteId, blockId, newName) => {
-                set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: state.missions[activeMissionId].Notes.map(n => n.noteId === noteId ? { ...n, blocks: n.blocks.map(b => b.blockId === blockId ? { ...b, blockContent: newName } : b) } : n) } } }));
+            RenameBlock: (note, blockId, newName) => {
+                set((state) => {
+                    const missionId = Object.keys(state.missions).find(id =>
+                        state.missions[id].Notes.some(n => n.noteId === note.noteId)
+                    );
+                    if (!missionId) return state;
+                    const mission = state.missions[missionId];
+                    return {
+                        missions: {
+                            ...state.missions,
+                            [missionId]: {
+                                ...mission,
+                                Notes: mission.Notes.map(n =>
+                                    n.noteId === note.noteId
+                                        ? { ...n, blocks: n.blocks.map(b => b.blockId === blockId ? { ...b, blockContent: newName } : b) }
+                                        : n
+                                )
+                            }
+                        }
+                    };
+                });
             },
-            updateBlock: (activeMissionId, noteId, blockId, newBlock) => {
-                set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: state.missions[activeMissionId].Notes.map(n => n.noteId === noteId ? { ...n, blocks: n.blocks.map(b => b.blockId === blockId ? { ...b, ...newBlock } : b) } : n) } } }));
+            updateBlock: (note, blockId, newBlock) => {
+
+                set((state) => {
+                    const missionId = Object.keys(state.missions).find(id =>
+                        state.missions[id].Notes.some(n => n.noteId === note.noteId)
+                    );
+                    if (!missionId) return state;
+                    const mission = state.missions[missionId];
+                    return {
+                        missions: {
+                            ...state.missions,
+                            [missionId]: {
+                                ...mission,
+                                Notes: mission.Notes.map(n =>
+                                    n.noteId === note.noteId
+                                        ? { ...n, blocks: n.blocks.map(b => b.blockId === blockId ? { ...b, ...newBlock } : b) }
+                                        : n
+                                )
+                            }
+                        }
+                    };
+                });
             },
         }),
         {
@@ -280,6 +361,19 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                     return {
                         ...persistedState,
                         missions
+                    };
+                }
+
+                if (version === 1) {
+                    const tasks = persistedState.tasks || {};
+                    Object.keys(tasks).forEach(taskId => {
+                        if (!tasks[taskId].linkedNoteIds) {
+                            tasks[taskId].linkedNoteIds = '';
+                        }
+                    });
+                    return {
+                        ...persistedState,
+                        tasks
                     };
                 }
                 return persistedState;

@@ -10,7 +10,8 @@ import { DndContext, type DragEndEvent, type DragOverEvent, type DragStartEvent 
 import { MainPage } from "../mainPage";
 import { MissionItem } from "@/components/Mission";
 import { cn } from "@/lib/utils";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
+import { useLocation, useNavigationType } from "react-router";
 import { generateRandomId } from "@/components/utils/RandomGenerator";
 import { ChatController } from "@/components/ChatBot/ChatBotWindow";
 // import { useNotes} from "@/store/notes";
@@ -25,14 +26,22 @@ export const WorkPage = () => {
     const { workspaces, activeWorkSpaceId, activeMissionId, missions,
         setWorkSpace,
         createMission, setMission, deleteMission, RenameMission,
-        addNotesToMission, setActiveNote,
+        setActiveNote,
         moveTask,
-        createNote,
+        createNote
     } = useWorkSpace();
     const navigate = useNavigate();
+    const location = useLocation();
+    const navigationType = useNavigationType();
 
     const activeMissions = Object.values(missions).filter((mission) => mission.WorkSpaceId === activeWorkSpaceId);
     const activateNoteId = activeMissions.find((mission) => mission.MissionId === activeMissionId)?.activateNoteId;
+
+    useEffect(() => {
+        if (navigationType === 'POP' && activeMissionId && activateNoteId) {
+            setActiveNote(activeMissionId, null);
+        }
+    }, [location.key]);
     // 用 useRef 保存跨渲染的可变值，用 useState 驱动 UI 更新
     const currentHoverIdRef = useRef<string | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,8 +122,9 @@ export const WorkPage = () => {
         setActiveNote(missionId, null)
     };
     const handleClicknote = (missionId: string, noteId: string) => {
-        setMission(missionId)
+        setMission(missionId);
         setActiveNote(missionId, noteId);
+        navigate('/work');
     };
 
     return (
@@ -168,14 +178,22 @@ export const WorkPage = () => {
                                             </SidebarMenuAction>
                                         </div>
                                         {mission.MissionId === activeMissionId && (
-                                            <SidebarMenuSub className="group/sub-menu-item flex bg-gray-200 rounded-md p-1 " key={'notes'}>
-                                                <SidebarContent>
+                                            <SidebarMenuSub className="group/sub-menu-item flex-col bg-gray-200 rounded-md p-1 mt-1 h-fit" key={'notes'}>
+                                                <SidebarContent >
                                                     {mission.Notes?.map((note) => (
-                                                        <SidebarMenuItem key={note.noteId} onClick={() => handleClicknote(mission.MissionId, note.noteId)}>
-                                                            <NoteItem note={note} />
+                                                        <SidebarMenuItem key={note.noteId}
+                                                            className="h-5"
+                                                            onClick={() => handleClicknote(mission.MissionId, note.noteId)}>
+                                                            <>
+                                                                <NoteItem note={note} nowmission={mission.MissionId} />
+
+                                                            </>
                                                         </SidebarMenuItem>
                                                     ))}
                                                 </SidebarContent>
+
+
+
                                                 <SidebarMenuSubButton>
                                                     <Button className="cursor-pointer" variant="outline" onClick={() => createNote(mission.MissionId, {
                                                         noteId: generateRandomId(),
