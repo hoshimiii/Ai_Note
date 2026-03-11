@@ -1,5 +1,5 @@
 import { useWorkSpace, type Note as NoteType } from "@/store/kanban";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "../ui/button";
 import { DeleteDialog } from "../items/DeleteDialog";
 import { RenameDialog } from "../items/RenameDialog";
@@ -52,6 +52,8 @@ export const NoteItem = ({ note, nowmission }: { note: NoteType, nowmission: str
 
 export const Note = ({ note, activeMissionId }: { note: NoteType, activeMissionId: string }) => {
     const { missions, boards, updateNote, createBlock, deleteBlock } = useWorkSpace();
+    //定时保存用
+    const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [localContents, setLocalContents] = useState<Record<string, string>>(
         () => Object.fromEntries(note?.blocks?.map(b => [b.blockId, b.blockContent]) ?? [])
@@ -89,6 +91,29 @@ export const Note = ({ note, activeMissionId }: { note: NoteType, activeMissionI
         };
         updateNote(activeMissionId, note?.noteId ?? '', updatedNote);
     };
+    //防抖保存机制
+    useEffect(() => {
+        const hasChanged = note.blocks.some(
+            b => (localContents[b.blockId] ?? b.blockContent) !== b.blockContent
+        );
+        if (!hasChanged) return;
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = setTimeout(() => {
+            const updatedNote: NoteType = {
+                ...note,
+                blocks: note.blocks.map(b => ({
+                    ...b,
+                    blockContent: localContents[b.blockId] ?? b.blockContent,
+                    blockUpdatedAt: new Date().toISOString(),
+                })),
+                noteUpdatedAt: new Date().toISOString(),
+            };
+            updateNote(activeMissionId, note.noteId, updatedNote);
+        }, 500);
+        return () => {
+            if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        };
+    }, [localContents, note.blocks, note.noteId, activeMissionId, updateNote]);
 
     const handleLinkTask = (note: NoteType | null, taskId: string | null) => {
         if (!note) return;
@@ -121,17 +146,18 @@ export const Note = ({ note, activeMissionId }: { note: NoteType, activeMissionI
             </div>
 
             {note?.blocks?.map((block) => (
-                <div className="p-1">
-                    <DeleteDialog
-                        title="确定要删除这个块吗?"
-                        description={`此操作将永久删除块及其所有关联的任务数据。`}
-                        onConfirm={() => deleteBlock(note, block.blockId)}
-                    />
+                <div key={block.blockId} className="p-1">
+
                     <Block
                         key={block.blockId}
                         block={block}
                         content={localContents[block.blockId] ?? block.blockContent}
                         onChange={(content) => handleBlockChange(block.blockId, content)}
+                    />
+                    <DeleteDialog
+                        title="确定要删除这个块吗?"
+                        description={`此操作将永久删除块及其所有关联的任务数据。`}
+                        onConfirm={() => deleteBlock(note, block.blockId)}
                     />
                 </div>
 

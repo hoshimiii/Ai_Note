@@ -17,7 +17,7 @@ interface ChatPanelProps {
 
 export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
     // useChat 会自动处理消息状态、输入框状态、以及流式请求
-    const { usertoken, messages, input, handleInputChange, handleSubmit, getcontext, isLoading, getresponse } = useChatbot();
+    const { usertoken, messages, handleSubmit, getcontext, isLoading, getresponse } = useChatbot();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { chatbotApi, baseurl } = useChatbot();
     // 自动滚动逻辑：每当有新消息（包括流式输出的字）时，滚动到底部
@@ -31,7 +31,7 @@ export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
             }
         }
     }, [messages]);
-
+    const inputRef = useRef<HTMLTextAreaElement>(null);
 
     return (
         <div className={cn(FloatMode !== 2 ? "flex flex-col h-full bg-background" : "flex flex-col w-full h-full bg-background")}>
@@ -62,20 +62,21 @@ export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
 
                         {/* 气泡 */}
                         <div className={cn(
-                            "max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-sm",
+                            FloatMode !== 2 ? "max-w-[300px]" : "max-w-[500px]",
+                            " rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm",
                             m.role === "user"
-                                ? "bg-gray-200 text-primary-foreground rounded-tr-none"
-                                : "bg-muted/50 text-foreground rounded-tl-none border"
+                                ? "bg-gray-200 text-foreground rounded-tr-none"
+                                : "bg-blue-100 text-foreground rounded-tl-none border"
                         )}>
-                            <div className=" max-w-none">
+                            <div className="min-w-0 whitespace-pre-wrap [&_.katex-display]:max-w-full [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden">
                                 {/* prose prose-sm dark:prose-invert */}
                                 <ReactMarkdown
                                     remarkPlugins={[remarkMath]}
                                     rehypePlugins={[rehypeKatex]}>
                                     {/* {m.messageContent} */}
-                                    {(isLoading && messages[messages.length - 1]?.role !== 'chatbot')
-                                        ? `正在思考...`
-                                        : m.messageContent.replace(/\\n/g, '\n')}
+                                    {(isLoading && (m.role === "assistant" || m.role === "chatbot") && !m.messageContent)
+                                        ? "正在思考..."
+                                        : m.messageContent.replace(/\\n/g, "\n")}
 
                                 </ReactMarkdown>
                             </div>
@@ -100,18 +101,21 @@ export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
             {/* 2. 输入区域 */}
             <div className="p-4 border-t bg-background">
                 <form
-                    onSubmit={(e) => handleSubmit(e)}
+                    onSubmit={(e) => handleSubmit(e, inputRef.current?.value ?? '')}
                     className="relative flex items-center gap-2">
                     <textarea
                         rows={1}
-                        value={input}
-                        onChange={(e) => handleInputChange(e)}
+                        ref={inputRef}
+                        // onChange={(e) => handleInputChange(e)}
                         placeholder="输入消息..."
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
-                                handleSubmit(e);
+                                handleSubmit(e, inputRef.current?.value ?? '');
                                 getresponse(getcontext(messages, 10), usertoken, baseurl);
+                                if (inputRef.current) {
+                                    inputRef.current.value = '';
+                                }
                             }
                         }}
                         className="flex-1 min-h-[40px] max-h-32 p-3 bg-muted/50 border rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm transition-all"
@@ -120,7 +124,7 @@ export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
                         type="submit"
                         size="icon"
 
-                        disabled={isLoading || !input.trim()}
+                        disabled={isLoading || !inputRef.current?.value.trim()}
                         className="shrink-0 rounded-xl text-gray-900"
                     >
                         {isLoading ? <Loader2 className="animate-spin" /> : <Send size={18} />}

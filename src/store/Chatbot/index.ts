@@ -7,7 +7,7 @@ import { persist } from "zustand/middleware";
 export type Message = {
     messageId: string;
     messageContent: string;
-    role: 'user' | 'chatbot';
+    role: 'user' | 'assistant' | 'chatbot';
     messageCreatedAt: string;
     messageTimestamp: number;
 }
@@ -23,7 +23,7 @@ interface ChatbotProps {
     messages: Message[];
     input: string;
     isLoading: boolean;
-    handleSubmit: (e: React.FormEvent<HTMLFormElement> | React.KeyboardEvent<HTMLTextAreaElement>) => void;
+    handleSubmit: (e: React.FormEvent<HTMLFormElement> | React.KeyboardEvent<HTMLTextAreaElement>, input: string) => void;
     handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     setchatbotApi: (api: string) => void;
     setusertoken: (token: string) => void;
@@ -46,15 +46,14 @@ export const useChatbot = create<ChatbotProps>()(
             input: '',
             isLoading: false,
             chatbotApi: '',
-            handleSubmit(e) {
+            handleSubmit(e, input) {
                 e.preventDefault();
-                const currentInput = get().input.trim();
-                if (!currentInput) return;
+                if (!input.trim()) return;
                 set({
                     input: '',
                     messages: [...get().messages, {
-                        messageId: generateRandomId(),
-                        messageContent: currentInput,
+                        messageId: generateRandomId(), 
+                        messageContent: input,
                         role: 'user',
                         messageCreatedAt: new Date().toISOString(),
                         messageTimestamp: Date.now(),
