@@ -38,3 +38,53 @@
 
 - 如果后续要覆盖更复杂 HTML，接入专门库（如 `turndown`）会更稳定。
 - 当前实现是轻量转换，适合你现在的标题/列表/代码块核心场景。
+
+---
+
+# 点击预览区一次直接定位光标
+
+## 问题
+
+点击 Markdown 预览区会切换到编辑态，但光标不在点击位置，还需要再次点击定位。
+
+## 原因
+
+预览区是渲染后的 HTML，切换到编辑态的 textarea 后，React 只会 `focus()`，不知道应该把光标放在哪。
+
+## 修复方案
+
+```
+点击预览 div
+  ↓
+caretRangeFromPoint(x, y)  ← 浏览器 API，返回点击位置的 DOM range
+  ↓
+取从预览 div 开始到点击位置的所有文本
+  ↓
+在原始 markdown 中反向查找该文本（取末尾30字符匹配）
+  ↓
+找到在 markdown 中的对应偏移量，存入 ref
+  ↓
+setIsEditing(true)
+  ↓
+useEffect 检测 isEditing 变为 true
+  ↓
+textareaRef.focus() + setSelectionRange(offset, offset)
+```
+
+## 关键 API
+
+```ts
+document.caretRangeFromPoint(x, y)
+// 返回点击坐标对应的 DOM Range 对象（含文本节点 + 字符偏移）
+
+const fullRange = document.createRange();
+fullRange.setStart(previewDiv, 0);
+fullRange.setEnd(range.startContainer, range.startOffset);
+const textBefore = fullRange.toString(); // 点击点之前的全部文本
+```
+
+## 已知限制
+
+- 渲染后的文本不包含 Markdown 语法字符（如 `**`、`##`），所以存在位置偏差
+- 对纯文本内容效果好，对大量语法符号的段落会有轻微偏差
+- Firefox 需要 `document.caretPositionFromPoint`，当前实现仅覆盖 Chromium

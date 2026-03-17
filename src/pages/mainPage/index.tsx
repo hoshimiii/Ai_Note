@@ -5,25 +5,31 @@ import { generateRandomId } from "@/components/utils/RandomGenerator";
 import { Note } from "@/components/Note";
 import { type Note as NoteType } from "@/store/kanban";
 import { useNavigate } from "react-router";
+import { useState } from "react";
 
 export const MainPage = (
     { nowMissionId, nowNoteId, Note_item }: { nowMissionId: string | null, nowNoteId: string | null, Note_item: NoteType }
 ) => {
     const { createBoard, setActiveNote } = useWorkSpace();
     const navigate = useNavigate();
+    const [scrollToBlockId, setScrollToBlockId] = useState<string | undefined>();
     return (
 
         <div >
             {nowMissionId ?
                 nowNoteId ? (
                     <div>
-                        <Note key={nowNoteId} note={Note_item} activeMissionId={nowMissionId} />
+                        <Note key={nowNoteId} note={Note_item} activeMissionId={nowMissionId} scrollToBlockId={scrollToBlockId} />
                     </div>
                 ) : (
                     <>
                         MISSIONID:{nowMissionId}
                         <div className="flex flex-wrap w-[80vw]">
-                            <Board nowMissionId={nowMissionId ?? ''} setActiveNoteId={(noteId) => { setActiveNote(nowMissionId ?? '', noteId); navigate('/work'); }} />
+                            <Board nowMissionId={nowMissionId ?? ''} setActiveNoteId={(noteId, blockId) => {
+                                setScrollToBlockId(blockId);
+                                setActiveNote(nowMissionId ?? '', noteId);
+                                navigate('/work');
+                            }} />
                             <Button className="cursor-pointer" variant="outline" onClick={() => createBoard({
                                 BoardId: generateRandomId(),
                                 MissionId: nowMissionId ?? '',

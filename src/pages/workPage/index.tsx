@@ -3,10 +3,10 @@ import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuAction,
 import { Outlet, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { DeleteDialog } from "@/components/items/DeleteDialog";
-import { Hand, PencilIcon, TrashIcon } from "lucide-react";
+import { PencilIcon, TrashIcon } from "lucide-react";
 import { RenameDialog } from "@/components/items/RenameDialog";
-// import { Mission } from "@/components/Mission";
-import { DndContext, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
+import { DndContext, type DragEndEvent, type DragOverEvent, type DragStartEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { MainPage } from "../mainPage";
 import { MissionItem } from "@/components/Mission";
 import { cn } from "@/lib/utils";
@@ -14,21 +14,22 @@ import { useRef, useState, useEffect } from "react";
 import { useLocation, useNavigationType } from "react-router";
 import { generateRandomId } from "@/components/utils/RandomGenerator";
 import { ChatController } from "@/components/ChatBot/ChatBotWindow";
-// import { useNotes} from "@/store/notes";
 import { type Mission as MissionType } from "@/store/kanban";
 import { type Note as NoteType } from "@/store/kanban";
-// import {type Note as NoteType} from "@/store/notes";
 import { NoteItem } from "@/components/Note";
 
 
 
 export const WorkPage = () => {
-    const { workspaces, activeWorkSpaceId, activeMissionId, missions,
+    const {
+        workspaces, activeWorkSpaceId, activeMissionId, missions, boards, boardOrder, missionOrder,
         setWorkSpace,
         createMission, setMission, deleteMission, RenameMission,
         setActiveNote,
         moveTask,
-        createNote
+        reorderMissions, reorderBoards, reorderTasks,
+        createNote,
+        createBoard,
     } = useWorkSpace();
     const navigate = useNavigate();
     const location = useLocation();
@@ -37,29 +38,38 @@ export const WorkPage = () => {
     const activeMissions = Object.values(missions).filter((mission) => mission.WorkSpaceId === activeWorkSpaceId);
     const activateNoteId = activeMissions.find((mission) => mission.MissionId === activeMissionId)?.activateNoteId;
 
+    const orderedMissionIds = activeWorkSpaceId ? (missionOrder[activeWorkSpaceId] ?? []) : [];
+    const missionMap = Object.fromEntries(activeMissions.map(m => [m.MissionId, m]));
+    const orderedMissions = [
+        ...orderedMissionIds.map(id => missionMap[id]).filter(Boolean),
+        ...activeMissions.filter(m => !orderedMissionIds.includes(m.MissionId)),
+    ];
+
     useEffect(() => {
         if (navigationType === 'POP' && activeMissionId && activateNoteId) {
             setActiveNote(activeMissionId, null);
         }
     }, [location.key]);
-    // 用 useRef 保存跨渲染的可变值，用 useState 驱动 UI 更新
+
     const currentHoverIdRef = useRef<string | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const preMissionIdRef = useRef<string | null>(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
 
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    );
+
     const HandleDragStart = (event: DragStartEvent) => {
         const { active } = event;
         if (active.data.current?.type === 'task') {
-            // 记录拖拽开始时的 Mission，供恢复用
             preMissionIdRef.current = activeMissionId;
         }
     };
 
     const HandleDragOver = (event: DragOverEvent) => {
-        const { over } = event;
+        const { over, active } = event;
 
-        // 进入 board 区域：恢复清晰，方便确认放置位置
         if (over?.data.current?.type === 'board') {
             if (timerRef.current) {
                 clearTimeout(timerRef.current);
@@ -70,7 +80,6 @@ export const WorkPage = () => {
             return;
         }
 
-        // 不在任何可放置区域，或不在 mission 上：清除计时器
         if (!over || over.data.current?.type !== 'mission') {
             if (timerRef.current) {
                 clearTimeout(timerRef.current);
@@ -80,13 +89,12 @@ export const WorkPage = () => {
             return;
         }
 
-        const overId = over.id as string;
+        if (active.data.current?.type === 'mission') return;
 
+        const overId = over.id as string;
         if (overId !== currentHoverIdRef.current) {
             if (timerRef.current) clearTimeout(timerRef.current);
             currentHoverIdRef.current = overId;
-
-            // 停留 500ms 后切换预览 Mission
             timerRef.current = setTimeout(() => {
                 setMission(overId);
                 setIsPreviewing(true);
@@ -97,29 +105,86 @@ export const WorkPage = () => {
     const HandleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
 
-        // 清理悬停计时器
         if (timerRef.current) {
             clearTimeout(timerRef.current);
             timerRef.current = null;
         }
         currentHoverIdRef.current = null;
 
-        if (over && over.data.current?.type === 'board') {
-            const [, ABId, ATId] = String(active.id).split('+');
-            const [, OBId] = String(over.id).split('+');
-            moveTask(ATId, ABId, OBId);
-        } else {
-            // 未落到 board，恢复原 Mission
-            setMission(preMissionIdRef.current);
+        if (!over || active.id === over.id) {
+            setIsPreviewing(false);
+            preMissionIdRef.current = null;
+            return;
+        }
+
+        const activeType = active.data.current?.type;
+        const overType = over.data.current?.type;
+
+        if (activeType === 'mission') {
+            const activeId = String(active.id);
+            const overId = String(over.id);
+            const wsId = activeWorkSpaceId;
+            if (!wsId) return;
+            const currentOrder = missionOrder[wsId] ?? orderedMissions.map(m => m.MissionId);
+            const oldIndex = currentOrder.indexOf(activeId);
+            const newIndex = currentOrder.indexOf(overId);
+            if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+                reorderMissions(wsId, arrayMove(currentOrder, oldIndex, newIndex));
+            }
+        } else if (activeType === 'board') {
+            const activeId = String(active.id);
+            const overId = String(over.id);
+            const [missionId] = activeId.split('+');
+            const currentOrder = boardOrder[missionId] ??
+                Object.values(boards).filter(b => b.MissionId === missionId).map(b => missionId + '+' + b.BoardId);
+            const oldIndex = currentOrder.indexOf(activeId);
+            const newIndex = currentOrder.indexOf(overId);
+            if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+                const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+                reorderBoards(missionId, newOrder.map(id => id.split('+')[1]));
+            }
+        } else if (activeType === 'task') {
+            const activeIdStr = String(active.id);
+            const overIdStr = String(over.id);
+            const [, activeBoardId, activeTaskId] = activeIdStr.split('+');
+
+            if (overType === 'task') {
+                const [, overBoardId, overTaskId] = overIdStr.split('+');
+                if (activeBoardId === overBoardId) {
+                    const board = boards[activeBoardId];
+                    if (!board) return;
+                    const taskIds = board.Tasks.map(t => activeBoardId === overBoardId
+                        ? activeMissionId + '+' + activeBoardId + '+' + t.TaskId
+                        : t.TaskId);
+                    const oldIndex = taskIds.indexOf(activeIdStr);
+                    const newIndex = taskIds.indexOf(overIdStr);
+                    if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+                        const newOrder = arrayMove(board.Tasks.map(t => t.TaskId), oldIndex, newIndex);
+                        reorderTasks(activeBoardId, newOrder);
+                    }
+                } else {
+                    const targetBoard = boards[overBoardId];
+                    if (!targetBoard) return;
+                    const overIndex = targetBoard.Tasks.findIndex(t => t.TaskId === overTaskId);
+                    moveTask(activeTaskId, activeBoardId, overBoardId, overIndex);
+                }
+            } else if (overType === 'board') {
+                const [, overBoardId] = overIdStr.split('+');
+                if (activeBoardId !== overBoardId) {
+                    moveTask(activeTaskId, activeBoardId, overBoardId);
+                }
+            } else {
+                setMission(preMissionIdRef.current);
+            }
         }
 
         setIsPreviewing(false);
         preMissionIdRef.current = null;
-
     };
+
     const handleClickmission = (missionId: string) => {
         setMission(missionId);
-        setActiveNote(missionId, null)
+        setActiveNote(missionId, null);
     };
     const handleClicknote = (missionId: string, noteId: string) => {
         setMission(missionId);
@@ -131,16 +196,16 @@ export const WorkPage = () => {
         <div>
             <SidebarProvider>
                 <DndContext
+                    sensors={sensors}
                     onDragStart={HandleDragStart}
                     onDragEnd={HandleDragEnd}
                     onDragOver={HandleDragOver}
                 >
-                    {/* 这里SidebarProvider的作用是什么： SidebarProvider是用来提供Sidebar的，也就是提供Sidebar的上下文，也就是提供Sidebar的上下文 */}
                     <Sidebar side="left">
-                        <SidebarHeader> {workspaces.find(workspace => workspace.workspaceId === activeWorkSpaceId)?.workspaceName}</SidebarHeader>
+                        <SidebarHeader>{workspaces.find(workspace => workspace.workspaceId === activeWorkSpaceId)?.workspaceName}</SidebarHeader>
                         <Button
                             variant="outline"
-                            onClick={() => { setMission(null), setWorkSpace(null), navigate('/workspace') }}
+                            onClick={() => { setMission(null); setWorkSpace(null); navigate('/workspace'); }}
                             className="cursor-pointer mx-4 mb-2"
                         >
                             返回工作区
@@ -154,66 +219,67 @@ export const WorkPage = () => {
                                 title: 'New Mission',
                                 Notes: []
                             })}>Create New Mission</Button>
-                            <SidebarMenu>
-                                {activeMissions.map((mission) => (
-                                    <SidebarMenuItem className="group/menu-item flex-col bg-gray-100 rounded-md p-1 " key={mission.MissionId}>
-                                        <div className="flex justify-between items-center">
-                                            <SidebarMenuButton className="cursor-pointer w-[70%]" variant="default" onClick={() => handleClickmission(mission.MissionId)}>
-                                                <MissionItem MissionId={mission.MissionId} WorkSpaceId={mission.WorkSpaceId} title={mission.title} Notes={mission.Notes ?? []} />
-                                            </SidebarMenuButton>
-                                            <SidebarMenuAction asChild>
-                                                <DeleteDialog
-                                                    title="确定要删除任务吗?"
-                                                    description="此操作无法撤销，相关数据将永久消失"
-                                                    onConfirm={() => deleteMission(mission.MissionId)}
-                                                    trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><TrashIcon className="w-4 h-4 text-red-500" /></Button>} />
 
-                                            </SidebarMenuAction>
-                                            <SidebarMenuAction asChild>
-                                                <RenameDialog
-                                                    title="重命名?"
-                                                    initialName={mission.title}
-                                                    onConfirm={(newName) => RenameMission(mission.MissionId, newName)}
-                                                    trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><PencilIcon className="w-4 h-4 text-blue-500" /></Button>} />
-                                            </SidebarMenuAction>
-                                        </div>
-                                        {mission.MissionId === activeMissionId && (
-                                            <SidebarMenuSub className="group/sub-menu-item flex-col bg-gray-200 rounded-md p-1 mt-1 h-fit" key={'notes'}>
-                                                <SidebarContent >
-                                                    {mission.Notes?.map((note) => (
-                                                        <SidebarMenuItem key={note.noteId}
-                                                            className="h-5"
-                                                            onClick={() => handleClicknote(mission.MissionId, note.noteId)}>
-                                                            <>
+                            <SortableContext items={orderedMissions.map(m => m.MissionId)} strategy={verticalListSortingStrategy}>
+                                <SidebarMenu>
+                                    {orderedMissions.map((mission) => (
+                                        <SidebarMenuItem className="group/menu-item flex-col bg-gray-100 rounded-md p-1" key={mission.MissionId}>
+                                            <div className="flex justify-between items-center">
+                                                <SidebarMenuButton className="cursor-pointer w-[70%]" variant="default" onClick={() => handleClickmission(mission.MissionId)}>
+                                                    <MissionItem MissionId={mission.MissionId} WorkSpaceId={mission.WorkSpaceId} title={mission.title} Notes={mission.Notes ?? []} />
+                                                </SidebarMenuButton>
+                                                <SidebarMenuAction asChild>
+                                                    <DeleteDialog
+                                                        title="確定要刪除任務嗎?"
+                                                        description="此操作無法撤銷，相關數據將永久消失"
+                                                        onConfirm={() => deleteMission(mission.MissionId)}
+                                                        trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><TrashIcon className="w-4 h-4 text-red-500" /></Button>} />
+                                                </SidebarMenuAction>
+                                                <SidebarMenuAction asChild>
+                                                    <RenameDialog
+                                                        title="重命名?"
+                                                        initialName={mission.title}
+                                                        onConfirm={(newName) => RenameMission(mission.MissionId, newName)}
+                                                        trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><PencilIcon className="w-4 h-4 text-blue-500" /></Button>} />
+                                                </SidebarMenuAction>
+                                            </div>
+                                            {mission.MissionId === activeMissionId && (
+                                                <SidebarMenuSub className="group/sub-menu-item flex-col bg-gray-200 rounded-md p-1 mt-1 h-fit" key={'notes'}>
+                                                    <SidebarContent>
+                                                        {mission.Notes?.map((note) => (
+                                                            <SidebarMenuItem key={note.noteId} className="h-5" onClick={() => handleClicknote(mission.MissionId, note.noteId)}>
                                                                 <NoteItem note={note} nowmission={mission.MissionId} />
+                                                            </SidebarMenuItem>
+                                                        ))}
+                                                    </SidebarContent>
+                                                    <SidebarMenuSubButton>
+                                                        <Button className="cursor-pointer" variant="outline" onClick={() => createNote(mission.MissionId, {
+                                                            noteId: generateRandomId(),
+                                                            noteTitle: 'New Note',
+                                                            noteContent: '',
+                                                            noteCreatedAt: new Date().toISOString(),
+                                                            noteUpdatedAt: new Date().toISOString(),
+                                                            relatedTaskId: '',
+                                                            blocks: []
+                                                        })}>create new note</Button>
+                                                    </SidebarMenuSubButton>
+                                                </SidebarMenuSub>
+                                            )}
+                                        </SidebarMenuItem>
+                                    ))}
+                                </SidebarMenu>
+                            </SortableContext>
 
-                                                            </>
-                                                        </SidebarMenuItem>
-                                                    ))}
-                                                </SidebarContent>
-
-
-
-                                                <SidebarMenuSubButton>
-                                                    <Button className="cursor-pointer" variant="outline" onClick={() => createNote(mission.MissionId, {
-                                                        noteId: generateRandomId(),
-                                                        noteTitle: 'New Note',
-                                                        noteContent: '',
-                                                        noteCreatedAt: new Date().toISOString(),
-                                                        noteUpdatedAt: new Date().toISOString(),
-                                                        relatedTaskId: '',
-                                                        blocks: []
-                                                    })}>create new note</Button>
-                                                </SidebarMenuSubButton>
-                                            </SidebarMenuSub>
-                                        )}
-                                    </SidebarMenuItem>
-                                ))}
-                            </SidebarMenu>
+                            <Button className="cursor-pointer mt-2" variant="outline" onClick={() => {
+                                if (!activeMissionId) return;
+                                createBoard({
+                                    BoardId: generateRandomId(),
+                                    MissionId: activeMissionId,
+                                    title: 'New Board',
+                                    Tasks: [],
+                                });
+                            }}>Create New Board</Button>
                         </SidebarContent>
-
-
-
                     </Sidebar>
 
                     <main className={cn("flex-1 w-full transition-all duration-200", isPreviewing ? "opacity-50 scale-95 blur-in-sm" : "opacity-100 scale-95 blur-0")}>
@@ -224,11 +290,9 @@ export const WorkPage = () => {
                             Note_item={activeMissions.find((mission: MissionType) => mission.MissionId === activeMissionId)?.Notes?.find((note) => note.noteId === activateNoteId) ?? null as unknown as NoteType} />
                         <ChatController />
                         <Outlet />
-                        {/* outlet的作用是什么： outlet渲染子组件需不需要包含住被渲染的组件？ 是的，outlet渲染子组件需要包含住被渲染的组件。
-                    那这里为什么用<Outlet />的形式 */}
                     </main>
                 </DndContext>
             </SidebarProvider>
-        </div >
-    )
-}
+        </div>
+    );
+};

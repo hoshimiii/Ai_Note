@@ -2,7 +2,7 @@ import { type Block as BlockType } from "@/store/kanban";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
-import { useState, type ClipboardEvent } from "react";
+import { useState, useEffect, useRef, type ClipboardEvent } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 
@@ -78,14 +78,73 @@ const blockToMarkdown = (node: ChildNode, depth = 0): string => {
     return blocks() || inline();
 };
 
-const htmlToMarkdown = (html: string): string => {
+const extractMathFromHtml = (html: string): string => {
     const doc = new DOMParser().parseFromString(html, "text/html");
+    const annotations = doc.querySelectorAll('annotation[encoding="application/x-tex"]');
+    annotations.forEach((ann) => {
+        const latex = (ann.textContent ?? "").trim();
+        if (!latex) return;
+        const katexSpan = ann.closest(".katex");
+        if (katexSpan) {
+            const replacement = doc.createTextNode("$" + latex + "$");
+            katexSpan.parentNode?.replaceChild(replacement, katexSpan);
+        }
+    });
+    const scripts = doc.querySelectorAll('script[type="math/tex"], script[type="math/tex; mode=display"]');
+    scripts.forEach((script) => {
+        const latex = (script.textContent ?? "").trim();
+        if (!latex) return;
+        const wrap = script.getAttribute("type")?.includes("display") ? "$$" : "$";
+        const replacement = doc.createTextNode(wrap + latex + wrap);
+        script.parentNode?.replaceChild(replacement, script);
+    });
+    return doc.body.innerHTML;
+};
+
+const htmlToMarkdown = (html: string): string => {
+    const withMath = extractMathFromHtml(html);
+    const doc = new DOMParser().parseFromString(withMath, "text/html");
     const out = Array.from(doc.body.childNodes).map(node => blockToMarkdown(node)).filter(Boolean).join("\n\n");
     return out.replace(/\n{3,}/g, "\n\n").trim();
 };
 
 export const Block = ({ block, content, onChange }: { block: BlockType, content: string, onChange: (content: string) => void }) => {
     const [isEditing, setIsEditing] = useState(false);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const previewRef = useRef<HTMLDivElement>(null);
+    const pendingCursorRef = useRef<number>(content.length);
+
+    useEffect(() => {
+        if (!isEditing || !textareaRef.current) return;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(pendingCursorRef.current, pendingCursorRef.current);
+    }, [isEditing]);
+
+    const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        pendingCursorRef.current = content.length;
+        if (previewRef.current && document.caretRangeFromPoint) {
+            const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+            if (range) {
+                const fullRange = document.createRange();
+                fullRange.setStart(previewRef.current, 0);
+                fullRange.setEnd(range.startContainer, range.startOffset);
+                const textBeforeClick = fullRange.toString();
+                const search = textBeforeClick.slice(-30);
+                if (search) {
+                    const idx = content.lastIndexOf(search);
+                    if (idx !== -1) {
+                        pendingCursorRef.current = idx + search.length;
+                    } else {
+                        const shortSearch = textBeforeClick.slice(-5);
+                        const idx2 = content.lastIndexOf(shortSearch);
+                        if (idx2 !== -1) pendingCursorRef.current = idx2 + shortSearch.length;
+                    }
+                }
+            }
+        }
+        setIsEditing(true);
+    };
+
     const handleMarkdownPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
         const html = e.clipboardData.getData("text/html");
         if (!html) return;
@@ -107,8 +166,9 @@ export const Block = ({ block, content, onChange }: { block: BlockType, content:
                     switch (block.blockType) {
                         case 'markdown':
                             return (
-                                <div className="min-h-12 border"
-                                    onClick={() => setIsEditing(true)}
+                                <div className="min-h-12"
+                                    ref={previewRef}
+                                    onClick={handlePreviewClick}
                                 >
                                     <ReactMarkdown
                                         remarkPlugins={[remarkMath]}
@@ -152,6 +212,7 @@ export const Block = ({ block, content, onChange }: { block: BlockType, content:
                         case 'markdown':
                             return (
                                 <textarea
+                                    ref={textareaRef}
                                     value={content}
                                     onBlur={() => setIsEditing(false)}
                                     onChange={(e) => onChange(e.target.value)}
