@@ -15,7 +15,7 @@ interface ChatPanelProps {
     FloatMode: string | number;
 }
 
-export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
+export function ChatPanel({ activeChatbotId: _activeChatbotId, FloatMode }: ChatPanelProps) {
     // useChat 会自动处理消息状态、输入框状态、以及流式请求
     const { messages, handleSubmit, isLoading } = useChatbot();
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -65,7 +65,9 @@ export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
                             " rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm",
                             m.role === "user"
                                 ? "bg-gray-200 text-foreground rounded-tr-none"
-                                : "bg-blue-100 text-foreground rounded-tl-none border"
+                                : m.role === "assistant"
+                                    ? "bg-amber-50 text-foreground rounded-tl-none border border-amber-200"
+                                    : "bg-blue-100 text-foreground rounded-tl-none border"
                         )}>
                             <div className="min-w-0 whitespace-pre-wrap [&_.katex-display]:max-w-full [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden">
                                 {/* prose prose-sm dark:prose-invert */}

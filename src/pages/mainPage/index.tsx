@@ -8,7 +8,7 @@ import { useNavigate } from "react-router";
 import { useState } from "react";
 
 export const MainPage = (
-    { nowMissionId, nowNoteId, Note_item }: { nowMissionId: string | null, nowNoteId: string | null, Note_item: NoteType }
+    { nowMissionId, nowNoteId, Note_item }: { nowMissionId: string | null, nowNoteId: string | null, Note_item: NoteType | null }
 ) => {
     const { createBoard, setActiveNote } = useWorkSpace();
     const navigate = useNavigate();
@@ -17,7 +17,7 @@ export const MainPage = (
 
         <div >
             {nowMissionId ?
-                nowNoteId ? (
+                nowNoteId && Note_item ? (
                     <div>
                         <Note key={nowNoteId} note={Note_item} activeMissionId={nowMissionId} scrollToBlockId={scrollToBlockId} />
                     </div>

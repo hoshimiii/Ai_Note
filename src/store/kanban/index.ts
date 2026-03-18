@@ -12,7 +12,7 @@ export type SubTask = {
 export type Mission = {
     MissionId: string,
     WorkSpaceId: string,
-    activateNoteId: string | null,
+    activeNoteId: string | null,
     title: string,
     Notes: Note[],
 }
@@ -57,10 +57,50 @@ type WorkSpace = {
     workspaceName: string,
 }
 
+export type CurrentContextSnapshot = {
+    activeWorkSpaceId: string | null,
+    currentMissionId: string | null,
+    currentMissionTitle: string | null,
+    currentNoteId: string | null,
+    currentNoteTitle: string | null,
+    previewMissionId: string | null,
+    effectiveMissionId: string | null,
+}
+
+export type NoteBlockSnapshot = Block & {
+    index: number,
+    preview: string,
+}
+
+export type NoteSnapshot = {
+    missionId: string,
+    noteId: string,
+    noteTitle: string,
+    relatedTaskId: string,
+    blocks: NoteBlockSnapshot[],
+}
+
+export type MissionSnapshot = {
+    missionId: string,
+    title: string,
+    boards: (Board & {
+        tasks: (Task & { subTaskCount: number })[],
+    })[],
+    notes: {
+        noteId: string,
+        noteTitle: string,
+        relatedTaskId: string,
+        blockCount: number,
+    }[],
+}
+
 interface WorkSpaceProps {
     workspaces: WorkSpace[],
     activeWorkSpaceId: string | null,
     activeMissionId: string | null,
+    currentMissionId: string | null,
+    currentNoteId: string | null,
+    previewMissionId: string | null,
 
     missionOrder: Record<string, string[]>,
     boardOrder: Record<string, string[]>,
@@ -76,6 +116,8 @@ interface WorkSpaceProps {
 
     createMission: (Mission: Mission) => void,
     setMission: (MissionId: string | null) => void,
+    setPreviewMission: (MissionId: string | null) => void,
+    clearPreviewMission: () => void,
     deleteMission: (MissionId: string) => void,
     RenameMission: (MissionId: string, newName: string) => void,
     setMissionNotes: (MissionId: string, notes: Note[]) => void,
@@ -116,15 +158,98 @@ interface WorkSpaceProps {
     deleteBlock: (note: Note, blockId: string) => void,
     RenameBlock: (note: Note, blockId: string, newName: string) => void,
     updateBlock: (note: Note, blockId: string, newBlock: Block) => void,
+
+    getCurrentContext: () => CurrentContextSnapshot,
+    getMissionSnapshot: (missionId: string) => MissionSnapshot | null,
+    getCurrentMissionSnapshot: () => MissionSnapshot | null,
+    getNoteSnapshot: (noteId: string) => NoteSnapshot | null,
+    getCurrentNoteSnapshot: () => NoteSnapshot | null,
+    getNoteBlocks: (noteId: string) => NoteBlockSnapshot[],
+    getCurrentNoteBlocks: () => NoteBlockSnapshot[],
+    findMissionByTitle: (title: string) => { missionId: string, title: string }[],
+    findBoardByTitle: (title: string, missionId?: string | null) => { missionId: string, boardId: string, title: string }[],
+    findTaskByTitle: (title: string, options?: { missionId?: string | null, boardId?: string | null }) => { missionId: string, boardId: string, taskId: string, title: string }[],
+    findSubTaskByTitle: (title: string, options?: { missionId?: string | null, boardId?: string | null, taskId?: string | null }) => { missionId: string, boardId: string, taskId: string, subTaskId: string, title: string }[],
+    findNoteByTitle: (title: string, missionId?: string | null) => { missionId: string, noteId: string, noteTitle: string }[],
+    findBlock: (options: { noteId: string, blockId?: string, index?: number, previewText?: string }) => { missionId: string, noteId: string, blockId: string, index: number, blockType: string, preview: string }[],
 }
+
+const normalizeText = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
+
+const getBlockPreview = (content: string) => {
+    const text = content.replace(/\s+/g, " ").trim();
+    return text.length > 80 ? text.slice(0, 80) : text;
+};
+
+const getOrderedBoards = (state: any, missionId: string) => {
+    const orderedBoardIds = state.boardOrder[missionId] ?? [];
+    const boardMap = Object.fromEntries(
+        Object.values(state.boards).filter((b: any) => b.MissionId === missionId).map((b: any) => [b.BoardId, b])
+    );
+    const orderedBoards = orderedBoardIds.map((id: string) => boardMap[id]).filter(Boolean);
+    const fallbackBoards = Object.values(state.boards).filter((b: any) => b.MissionId === missionId && !orderedBoardIds.includes(b.BoardId));
+    return [...orderedBoards, ...fallbackBoards];
+};
+
+const buildNoteSnapshotFromState = (state: any, noteId: string): NoteSnapshot | null => {
+    for (const missionId of Object.keys(state.missions || {})) {
+        const mission = state.missions[missionId];
+        const note = (mission.Notes || []).find((item: Note) => item.noteId === noteId);
+        if (!note) continue;
+        return {
+            missionId,
+            noteId: note.noteId,
+            noteTitle: note.noteTitle,
+            relatedTaskId: note.relatedTaskId,
+            blocks: (note.blocks || []).map((block: Block, index: number) => ({
+                ...block,
+                index,
+                preview: getBlockPreview(block.blockContent),
+            })),
+        };
+    }
+    return null;
+};
+
+const buildNoteBlocksFromState = (state: any, noteId: string): NoteBlockSnapshot[] => {
+    return buildNoteSnapshotFromState(state, noteId)?.blocks ?? [];
+};
+
+const buildMissionSnapshotFromState = (state: any, missionId: string): MissionSnapshot | null => {
+    const mission = state.missions?.[missionId];
+    if (!mission) return null;
+    const boards = getOrderedBoards(state, missionId).map((board: Board) => ({
+        ...board,
+        tasks: (board.Tasks || []).map((task) => ({
+            ...task,
+            subTasks: task.subTasks || [],
+            subTaskCount: (task.subTasks || []).length,
+        })),
+    }));
+    const notes = (mission.Notes || []).map((note: Note) => ({
+        noteId: note.noteId,
+        noteTitle: note.noteTitle,
+        relatedTaskId: note.relatedTaskId,
+        blockCount: (note.blocks || []).length,
+    }));
+    return {
+        missionId,
+        title: mission.title,
+        boards,
+        notes,
+    };
+};
 
 
 export const useWorkSpace = create<WorkSpaceProps>()(
     persist(
-        (set, _get) => ({
+        (set, get) => ({
             workspaces: [],
             activeWorkSpaceId: null,
             activeMissionId: null,
+            currentMissionId: null,
+            currentNoteId: null,
+            previewMissionId: null,
             activeNoteId: null,
             missionOrder: {},
             boardOrder: {},
@@ -137,7 +262,17 @@ export const useWorkSpace = create<WorkSpaceProps>()(
             },
 
             setWorkSpace: (workspaceId) => {
-                set({ activeWorkSpaceId: workspaceId });
+                set((state) => {
+                    const currentMission = state.currentMissionId ? state.missions[state.currentMissionId] : null;
+                    const keepCurrentMission = !!workspaceId && currentMission?.WorkSpaceId === workspaceId;
+                    return {
+                        activeWorkSpaceId: workspaceId,
+                        activeMissionId: keepCurrentMission ? state.activeMissionId : null,
+                        currentMissionId: keepCurrentMission ? state.currentMissionId : null,
+                        currentNoteId: keepCurrentMission ? state.currentNoteId : null,
+                        previewMissionId: null,
+                    };
+                });
             },
             deleteWorkSpace: (workspaceId) => {
                 set((state) => {
@@ -151,6 +286,10 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                     return {
                         workspaces: nextWorkspaces,
                         activeWorkSpaceId: nextActiveId,
+                        activeMissionId: state.activeWorkSpaceId === workspaceId ? null : state.activeMissionId,
+                        currentMissionId: state.activeWorkSpaceId === workspaceId ? null : state.currentMissionId,
+                        currentNoteId: state.activeWorkSpaceId === workspaceId ? null : state.currentNoteId,
+                        previewMissionId: state.activeWorkSpaceId === workspaceId ? null : state.previewMissionId,
                         missionOrder: nextMissionOrder,
                     };
                 });
@@ -177,7 +316,24 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                 });
             },
             setMission: (missionId) => {
-                set({ activeMissionId: missionId });
+                set({
+                    activeMissionId: missionId,
+                    currentMissionId: missionId,
+                    currentNoteId: null,
+                    previewMissionId: null,
+                });
+            },
+            setPreviewMission: (missionId) => {
+                set((state) => ({
+                    previewMissionId: missionId,
+                    activeMissionId: missionId ?? state.currentMissionId,
+                }));
+            },
+            clearPreviewMission: () => {
+                set((state) => ({
+                    previewMissionId: null,
+                    activeMissionId: state.currentMissionId,
+                }));
             },
             deleteMission: (missionId) => {
                 set((state) => {
@@ -189,6 +345,10 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                     return {
                         missions: Object.fromEntries(Object.entries(state.missions).filter(([id]) => id !== missionId)),
                         missionOrder: nextMissionOrder,
+                        activeMissionId: state.activeMissionId === missionId ? null : state.activeMissionId,
+                        currentMissionId: state.currentMissionId === missionId ? null : state.currentMissionId,
+                        currentNoteId: state.currentMissionId === missionId ? null : state.currentNoteId,
+                        previewMissionId: state.previewMissionId === missionId ? null : state.previewMissionId,
                     };
                 });
             },
@@ -217,7 +377,13 @@ export const useWorkSpace = create<WorkSpaceProps>()(
 
 
             setActiveNote: (activeMissionId, noteId) => {
-                set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], activateNoteId: noteId } } }));
+                set((state) => ({
+                    activeMissionId,
+                    currentMissionId: activeMissionId,
+                    currentNoteId: noteId,
+                    previewMissionId: null,
+                    missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], activeNoteId: noteId } }
+                }));
             },
 
             createBoard: (board) => {
@@ -465,7 +631,10 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                 return note;
             },
             deleteNote: (activeMissionId, noteId) => {
-                set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: state.missions[activeMissionId].Notes.filter(n => n.noteId !== noteId) } } }));
+                set((state) => ({
+                    currentNoteId: state.currentNoteId === noteId ? null : state.currentNoteId,
+                    missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: state.missions[activeMissionId].Notes.filter(n => n.noteId !== noteId), activeNoteId: state.missions[activeMissionId].activeNoteId === noteId ? null : state.missions[activeMissionId].activeNoteId } }
+                }));
             },
             RenameNote: (activeMissionId, noteId, newName) => {
                 set((state) => ({ missions: { ...state.missions, [activeMissionId]: { ...state.missions[activeMissionId], Notes: state.missions[activeMissionId].Notes.map(n => n.noteId === noteId ? { ...n, noteTitle: newName } : n) } } }));
@@ -588,10 +757,122 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                     };
                 });
             },
+            getCurrentContext: () => {
+                const state = get();
+                const currentMission = state.currentMissionId ? state.missions[state.currentMissionId] : null;
+                const currentNote = state.currentNoteId ? currentMission?.Notes.find(n => n.noteId === state.currentNoteId) : null;
+                return {
+                    activeWorkSpaceId: state.activeWorkSpaceId,
+                    currentMissionId: state.currentMissionId,
+                    currentMissionTitle: currentMission?.title ?? null,
+                    currentNoteId: state.currentNoteId,
+                    currentNoteTitle: currentNote?.noteTitle ?? null,
+                    previewMissionId: state.previewMissionId,
+                    effectiveMissionId: state.previewMissionId ?? state.currentMissionId,
+                };
+            },
+            getMissionSnapshot: (missionId) => buildMissionSnapshotFromState(get(), missionId),
+            getCurrentMissionSnapshot: () => {
+                const state = get();
+                return state.currentMissionId ? buildMissionSnapshotFromState(state, state.currentMissionId) : null;
+            },
+            getNoteSnapshot: (noteId) => buildNoteSnapshotFromState(get(), noteId),
+            getCurrentNoteSnapshot: () => {
+                const state = get();
+                return state.currentNoteId ? buildNoteSnapshotFromState(state, state.currentNoteId) : null;
+            },
+            getNoteBlocks: (noteId) => buildNoteBlocksFromState(get(), noteId),
+            getCurrentNoteBlocks: () => {
+                const state = get();
+                return state.currentNoteId ? buildNoteBlocksFromState(state, state.currentNoteId) : [];
+            },
+            findMissionByTitle: (title) => {
+                const target = normalizeText(title);
+                return Object.values(get().missions)
+                    .filter((mission) => normalizeText(mission.title) === target)
+                    .map((mission) => ({ missionId: mission.MissionId, title: mission.title }));
+            },
+            findBoardByTitle: (title, missionId) => {
+                const state = get();
+                const target = normalizeText(title);
+                const missionIds = missionId ? [missionId] : Object.keys(state.missions);
+                return missionIds.flatMap((currentMissionId) =>
+                    getOrderedBoards(state, currentMissionId)
+                        .filter((board: Board) => normalizeText(board.title) === target)
+                        .map((board: Board) => ({ missionId: currentMissionId, boardId: board.BoardId, title: board.title }))
+                );
+            },
+            findTaskByTitle: (title, options) => {
+                const state = get();
+                const target = normalizeText(title);
+                const missionIds = options?.missionId ? [options.missionId] : Object.keys(state.missions);
+                return missionIds.flatMap((missionId) =>
+                    getOrderedBoards(state, missionId)
+                        .filter((board: Board) => !options?.boardId || board.BoardId === options.boardId)
+                        .flatMap((board: Board) =>
+                            (board.Tasks || [])
+                                .filter((task) => normalizeText(task.title) === target)
+                                .map((task) => ({ missionId, boardId: board.BoardId, taskId: task.TaskId, title: task.title }))
+                        )
+                );
+            },
+            findSubTaskByTitle: (title, options) => {
+                const state = get();
+                const target = normalizeText(title);
+                const missionIds = options?.missionId ? [options.missionId] : Object.keys(state.missions);
+                return missionIds.flatMap((missionId) =>
+                    getOrderedBoards(state, missionId)
+                        .filter((board: Board) => !options?.boardId || board.BoardId === options.boardId)
+                        .flatMap((board: Board) =>
+                            (board.Tasks || [])
+                                .filter((task) => !options?.taskId || task.TaskId === options.taskId)
+                                .flatMap((task) =>
+                                    (task.subTasks || [])
+                                        .filter((subTask) => normalizeText(subTask.title) === target)
+                                        .map((subTask) => ({
+                                            missionId,
+                                            boardId: board.BoardId,
+                                            taskId: task.TaskId,
+                                            subTaskId: subTask.subTaskId,
+                                            title: subTask.title,
+                                        }))
+                                )
+                        )
+                );
+            },
+            findNoteByTitle: (title, missionId) => {
+                const state = get();
+                const target = normalizeText(title);
+                const missionIds = missionId ? [missionId] : Object.keys(state.missions);
+                return missionIds.flatMap((currentMissionId) =>
+                    (state.missions[currentMissionId]?.Notes || [])
+                        .filter((note: Note) => normalizeText(note.noteTitle) === target)
+                        .map((note: Note) => ({ missionId: currentMissionId, noteId: note.noteId, noteTitle: note.noteTitle }))
+                );
+            },
+            findBlock: ({ noteId, blockId, index, previewText }) => {
+                const snapshot = buildNoteSnapshotFromState(get(), noteId);
+                if (!snapshot) return [];
+                return snapshot.blocks
+                    .filter((block) => {
+                        if (blockId && block.blockId !== blockId) return false;
+                        if (typeof index === "number" && block.index !== index) return false;
+                        if (previewText && !normalizeText(block.preview).includes(normalizeText(previewText))) return false;
+                        return true;
+                    })
+                    .map((block) => ({
+                        missionId: snapshot.missionId,
+                        noteId: snapshot.noteId,
+                        blockId: block.blockId,
+                        index: block.index,
+                        blockType: block.blockType,
+                        preview: block.preview,
+                    }));
+            },
         }),
         {
             name: 'workspace-storage',
-            version: 3,
+            version: 5,
             migrate: (persistedState: any, version: number) => {
                 let state = persistedState;
                 if (version < 1) {
@@ -603,9 +884,15 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                     });
                     state = { ...state, missions };
                 }
-                if (version < 3) {
+                if (version < 5) {
                     const missions = state.missions || {};
+                    const boards = state.boards || {};
+                    const tasks = state.tasks || {};
                     Object.keys(missions).forEach(missionId => {
+                        if (missions[missionId].activeNoteId === undefined) {
+                            missions[missionId].activeNoteId = missions[missionId].activateNoteId ?? null;
+                        }
+                        delete missions[missionId].activateNoteId;
                         (missions[missionId].Notes || []).forEach((note: any) => {
                             (note.blocks || []).forEach((block: any) => {
                                 if (block.linkedBoardId === undefined) block.linkedBoardId = "";
@@ -614,7 +901,27 @@ export const useWorkSpace = create<WorkSpaceProps>()(
                             });
                         });
                     });
-                    state = { ...state, missions };
+                    Object.keys(boards).forEach(boardId => {
+                        boards[boardId].Tasks = (boards[boardId].Tasks || []).map((task: any) => ({
+                            ...task,
+                            subTasks: Array.isArray(task.subTasks) ? task.subTasks : [],
+                        }));
+                    });
+                    Object.keys(tasks).forEach(taskId => {
+                        tasks[taskId] = {
+                            ...tasks[taskId],
+                            subTasks: Array.isArray(tasks[taskId]?.subTasks) ? tasks[taskId].subTasks : [],
+                        };
+                    });
+                    state = {
+                        ...state,
+                        currentMissionId: state.currentMissionId ?? state.activeMissionId ?? null,
+                        currentNoteId: state.currentNoteId ?? null,
+                        previewMissionId: null,
+                        missions,
+                        boards,
+                        tasks,
+                    };
                 }
                 return state;
             }

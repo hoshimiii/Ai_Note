@@ -63,11 +63,12 @@ export const useChatbot = create<ChatbotState>()(
 
             sendMessage: async (input: string) => {
                 if (!input.trim()) return;
+                const now = new Date().toISOString();
                 const userMsg: Message = {
                     messageId: generateRandomId(),
                     messageContent: input,
                     role: "user",
-                    messageCreatedAt: new Date().toISOString(),
+                    messageCreatedAt: now,
                     messageTimestamp: Date.now(),
                 };
                 set((state) => ({ messages: [...state.messages, userMsg], isLoading: true }));
@@ -77,13 +78,14 @@ export const useChatbot = create<ChatbotState>()(
                     messageId: botMsgId,
                     messageContent: "",
                     role: "chatbot",
-                    messageCreatedAt: new Date().toISOString(),
+                    messageCreatedAt: now,
                     messageTimestamp: Date.now(),
                 };
                 set((state) => ({ messages: [...state.messages, botMsg] }));
 
                 const historyLines = get()
                     .messages
+                    .filter((m) => m.role !== "assistant")
                     .slice(-10)
                     .map((m) => `${m.role}: ${m.messageContent}`);
 
@@ -92,7 +94,28 @@ export const useChatbot = create<ChatbotState>()(
                 const agent = new ReActAgent(llm, toolExecutor);
 
                 try {
-                    const answer = (await agent.run(input, historyLines)) ?? "";
+                    const answer = (await agent.run(input, historyLines, {
+                        onTrace: ({ step, phase, content }) => {
+                            const title =
+                                phase === "thought"
+                                    ? `思考 ${step}`
+                                    : phase === "action"
+                                        ? `动作 ${step}`
+                                        : `观察 ${step}`;
+                            set((state) => ({
+                                messages: [
+                                    ...state.messages,
+                                    {
+                                        messageId: generateRandomId(),
+                                        messageContent: `### ${title}\n${content}`,
+                                        role: "assistant",
+                                        messageCreatedAt: new Date().toISOString(),
+                                        messageTimestamp: Date.now(),
+                                    },
+                                ],
+                            }));
+                        },
+                    })) ?? "";
                     set((state) => ({
                         messages: state.messages.map((m) =>
                             m.messageId === botMsgId

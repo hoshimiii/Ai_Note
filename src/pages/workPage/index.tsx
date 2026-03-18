@@ -15,16 +15,15 @@ import { useLocation, useNavigationType } from "react-router";
 import { generateRandomId } from "@/components/utils/RandomGenerator";
 import { ChatController } from "@/components/ChatBot/ChatBotWindow";
 import { type Mission as MissionType } from "@/store/kanban";
-import { type Note as NoteType } from "@/store/kanban";
 import { NoteItem } from "@/components/Note";
 
 
 
 export const WorkPage = () => {
     const {
-        workspaces, activeWorkSpaceId, activeMissionId, missions, boards, boardOrder, missionOrder,
+        workspaces, activeWorkSpaceId, currentMissionId, previewMissionId, missions, boards, boardOrder, missionOrder,
         setWorkSpace,
-        createMission, setMission, deleteMission, RenameMission,
+        createMission, setMission, setPreviewMission, clearPreviewMission, deleteMission, RenameMission,
         setActiveNote,
         moveTask,
         reorderMissions, reorderBoards, reorderTasks,
@@ -36,7 +35,8 @@ export const WorkPage = () => {
     const navigationType = useNavigationType();
 
     const activeMissions = Object.values(missions).filter((mission) => mission.WorkSpaceId === activeWorkSpaceId);
-    const activateNoteId = activeMissions.find((mission) => mission.MissionId === activeMissionId)?.activateNoteId;
+    const activeNoteId = activeMissions.find((mission) => mission.MissionId === currentMissionId)?.activeNoteId;
+    const displayedMissionId = previewMissionId ?? currentMissionId;
 
     const orderedMissionIds = activeWorkSpaceId ? (missionOrder[activeWorkSpaceId] ?? []) : [];
     const missionMap = Object.fromEntries(activeMissions.map(m => [m.MissionId, m]));
@@ -46,8 +46,8 @@ export const WorkPage = () => {
     ];
 
     useEffect(() => {
-        if (navigationType === 'POP' && activeMissionId && activateNoteId) {
-            setActiveNote(activeMissionId, null);
+        if (navigationType === 'POP' && currentMissionId && activeNoteId) {
+            setActiveNote(currentMissionId, null);
         }
     }, [location.key]);
 
@@ -63,7 +63,7 @@ export const WorkPage = () => {
     const HandleDragStart = (event: DragStartEvent) => {
         const { active } = event;
         if (active.data.current?.type === 'task') {
-            preMissionIdRef.current = activeMissionId;
+            preMissionIdRef.current = currentMissionId;
         }
     };
 
@@ -77,6 +77,7 @@ export const WorkPage = () => {
                 currentHoverIdRef.current = null;
             }
             setIsPreviewing(false);
+            clearPreviewMission();
             return;
         }
 
@@ -86,6 +87,7 @@ export const WorkPage = () => {
                 timerRef.current = null;
                 currentHoverIdRef.current = null;
             }
+            clearPreviewMission();
             return;
         }
 
@@ -96,7 +98,7 @@ export const WorkPage = () => {
             if (timerRef.current) clearTimeout(timerRef.current);
             currentHoverIdRef.current = overId;
             timerRef.current = setTimeout(() => {
-                setMission(overId);
+                setPreviewMission(overId);
                 setIsPreviewing(true);
             }, 500);
         }
@@ -110,6 +112,7 @@ export const WorkPage = () => {
             timerRef.current = null;
         }
         currentHoverIdRef.current = null;
+        clearPreviewMission();
 
         if (!over || active.id === over.id) {
             setIsPreviewing(false);
@@ -146,16 +149,14 @@ export const WorkPage = () => {
         } else if (activeType === 'task') {
             const activeIdStr = String(active.id);
             const overIdStr = String(over.id);
-            const [, activeBoardId, activeTaskId] = activeIdStr.split('+');
+            const [activeMissionSortableId, activeBoardId, activeTaskId] = activeIdStr.split('+');
 
             if (overType === 'task') {
                 const [, overBoardId, overTaskId] = overIdStr.split('+');
                 if (activeBoardId === overBoardId) {
                     const board = boards[activeBoardId];
                     if (!board) return;
-                    const taskIds = board.Tasks.map(t => activeBoardId === overBoardId
-                        ? activeMissionId + '+' + activeBoardId + '+' + t.TaskId
-                        : t.TaskId);
+                    const taskIds = board.Tasks.map(t => activeMissionSortableId + '+' + activeBoardId + '+' + t.TaskId);
                     const oldIndex = taskIds.indexOf(activeIdStr);
                     const newIndex = taskIds.indexOf(overIdStr);
                     if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
@@ -174,7 +175,7 @@ export const WorkPage = () => {
                     moveTask(activeTaskId, activeBoardId, overBoardId);
                 }
             } else {
-                setMission(preMissionIdRef.current);
+                clearPreviewMission();
             }
         }
 
@@ -214,7 +215,7 @@ export const WorkPage = () => {
                         <SidebarContent>
                             <Button className="cursor-pointer" variant="outline" onClick={() => createMission({
                                 MissionId: generateRandomId(),
-                                activateNoteId: '',
+                                activeNoteId: null,
                                 WorkSpaceId: activeWorkSpaceId || '',
                                 title: 'New Mission',
                                 Notes: []
@@ -243,7 +244,7 @@ export const WorkPage = () => {
                                                         trigger={<Button variant="ghost" size="sm" className="cursor-pointer group-hover/menu-item:block hidden"><PencilIcon className="w-4 h-4 text-blue-500" /></Button>} />
                                                 </SidebarMenuAction>
                                             </div>
-                                            {mission.MissionId === activeMissionId && (
+                                            {mission.MissionId === displayedMissionId && (
                                                 <SidebarMenuSub className="group/sub-menu-item flex-col bg-gray-200 rounded-md p-1 mt-1 h-fit" key={'notes'}>
                                                     <SidebarContent>
                                                         {mission.Notes?.map((note) => (
@@ -271,10 +272,10 @@ export const WorkPage = () => {
                             </SortableContext>
 
                             <Button className="cursor-pointer mt-2" variant="outline" onClick={() => {
-                                if (!activeMissionId) return;
+                                if (!currentMissionId) return;
                                 createBoard({
                                     BoardId: generateRandomId(),
-                                    MissionId: activeMissionId,
+                                    MissionId: currentMissionId,
                                     title: 'New Board',
                                     Tasks: [],
                                 });
@@ -285,9 +286,9 @@ export const WorkPage = () => {
                     <main className={cn("flex-1 w-full transition-all duration-200", isPreviewing ? "opacity-50 scale-95 blur-in-sm" : "opacity-100 scale-95 blur-0")}>
                         <SidebarTrigger className="bg-gray-200 w-[20px] h-[20px]" />
                         <MainPage
-                            nowMissionId={activeMissionId}
-                            nowNoteId={activateNoteId ?? null}
-                            Note_item={activeMissions.find((mission: MissionType) => mission.MissionId === activeMissionId)?.Notes?.find((note) => note.noteId === activateNoteId) ?? null as unknown as NoteType} />
+                            nowMissionId={displayedMissionId}
+                            nowNoteId={previewMissionId ? null : (activeNoteId ?? null)}
+                            Note_item={activeMissions.find((mission: MissionType) => mission.MissionId === currentMissionId)?.Notes?.find((note) => note.noteId === activeNoteId) ?? null} />
                         <ChatController />
                         <Outlet />
                     </main>

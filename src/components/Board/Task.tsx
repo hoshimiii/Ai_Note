@@ -2,11 +2,12 @@ import { useWorkSpace } from "@/store/kanban";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import React, { useState } from "react";
-import { ChevronDownIcon, ChevronRightIcon, TrashIcon, LinkIcon, PlusIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon, TrashIcon, LinkIcon, PlusIcon, PencilIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { LinkSubTaskDialog } from "../items/LinkSubTaskDialog";
 import { generateRandomId } from "../utils/RandomGenerator";
 import type { SubTask } from "@/store/kanban";
+import { RenameDialog } from "../items/RenameDialog";
 
 
 interface TaskProps extends React.PropsWithChildren {
@@ -193,6 +194,17 @@ export const Task = (props: TaskProps) => {
                                         >
                                             <TrashIcon className="w-2.5 h-2.5 text-red-400" />
                                         </Button>
+                                        <RenameDialog
+                                            initialName={subTask.title}
+                                            title="重命名子任务"
+                                            onConfirm={(newName: string) => renameSubTask(BoardId, TaskId, subTask.subTaskId, newName)}
+                                            trigger={
+                                                <Button variant="ghost" size="icon" className="h-4 w-4 cursor-pointer">
+                                                    <PencilIcon className="w-2.5 h-2.5 text-blue-500" />
+                                                </Button>
+                                            }
+                                        />
+         
                                     </div>
                                 </div>
                             ))}
