@@ -1,133 +1,114 @@
-import { sendMessage } from "@/components/utils/apiutils";
 import { generateRandomId } from "@/components/utils/RandomGenerator";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-
+import { sliceContext, type LLMConfig, type ApiMessage } from "@/services/LLMService";
+import { createAgentLLM } from "@/agent/Agent_LLM";
+import ReActAgent from "@/agent/ReActAgent/main";
+import { createKanbanToolExecutor } from "@/agent/tools/kanbantools";
 
 export type Message = {
     messageId: string;
     messageContent: string;
-    role: 'user' | 'assistant' | 'chatbot';
+    role: "user" | "assistant" | "chatbot";
     messageCreatedAt: string;
     messageTimestamp: number;
-}
+};
 
-interface ChatbotProps {
+export interface ChatbotState {
     chatbotId: string;
     chatbotName: string;
     chatbotDescription: string;
-    baseurl: string;
-    chatbotModel: string;
-    chatbotApi: string;
-    usertoken: string;
+    config: LLMConfig;
     messages: Message[];
     input: string;
     isLoading: boolean;
-    handleSubmit: (e: React.FormEvent<HTMLFormElement> | React.KeyboardEvent<HTMLTextAreaElement>, input: string) => void;
+
+    setConfig: (config: Partial<LLMConfig>) => void;
     handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-    setchatbotApi: (api: string) => void;
-    setusertoken: (token: string) => void;
-    getresponse: (messages: { role: 'user' | 'assistant'; content: string }[], usertoken: string, baseurl: string) => void;
-    getcontext: (messages: Message[], contextlength: number) => { role: 'user' | 'assistant'; content: string }[];
-    getBoturl: () => void;
+    handleSubmit: (
+        e: React.FormEvent<HTMLFormElement> | React.KeyboardEvent<HTMLTextAreaElement>,
+        input: string
+    ) => void;
+    sendMessage: (input: string) => Promise<void>;
+    getContext: (contextLength: number) => ApiMessage[];
+    clearMessages: () => void;
 }
 
-
-export const useChatbot = create<ChatbotProps>()(
+export const useChatbot = create<ChatbotState>()(
     persist(
         (set, get) => ({
             chatbotId: generateRandomId(),
-            chatbotName: 'Chatbot',
-            chatbotDescription: 'test',
-            baseurl: 'https://api.siliconflow.cn/v1/chat/completions',
-            chatbotModel: 'deepseek-ai/DeepSeek-V3.2',
-            usertoken: 'sk-vnasjeozmivbxcsjqvijtutshvncclxzwdhrcycolkladrzo',
+            chatbotName: "Chatbot",
+            chatbotDescription: "test",
+            config: {
+                baseurl: "https://api.siliconflow.cn/v1/chat/completions",
+                model: "deepseek-ai/DeepSeek-V3.2",
+                usertoken: "sk-vnasjeozmivbxcsjqvijtutshvncclxzwdhrcycolkladrzo",
+            },
             messages: [],
-            input: '',
+            input: "",
             isLoading: false,
-            chatbotApi: '',
-            handleSubmit(e, input) {
+
+            setConfig: (partial) =>
+                set((state) => ({ config: { ...state.config, ...partial } })),
+
+            handleInputChange: (e) => set({ input: e.target.value }),
+
+            handleSubmit: (e, input) => {
                 e.preventDefault();
                 if (!input.trim()) return;
-                set({
-                    input: '',
-                    messages: [...get().messages, {
-                        messageId: generateRandomId(), 
-                        messageContent: input,
-                        role: 'user',
-                        messageCreatedAt: new Date().toISOString(),
-                        messageTimestamp: Date.now(),
-                    }]
-                });
-            },
-            getBoturl: () => {
-                set({})
-                return 'https://api.siliconflow.cn/v1';
-            },
-            setchatbotApi: (api) => {
-                set({ chatbotApi: api });
-            },
-            setusertoken: (token) => {
-                set({ usertoken: token });
-            },
-            handleInputChange: (e) => {
-                set({ input: e.target.value });
+                set({ input: "" });
+                get().sendMessage(input);
             },
 
-            getcontext: (messages, contextlength) => {
-                return messages.slice(-contextlength).map(msg => ({
-                    role: msg.role === 'chatbot' ? 'assistant' as const : 'user' as const,
-                    content: msg.messageContent,
-                }));
-            },
-            getresponse: async (messages, usertoken, baseurl) => {
-                const response = await sendMessage(messages, usertoken, baseurl, get().chatbotModel)
-                //流式传输
-                const reader = response.body?.getReader();
-                const decoder = new TextDecoder();
-                let fullContent = ""; // 缓存完整内容
+            sendMessage: async (input: string) => {
+                if (!input.trim()) return;
+                const userMsg: Message = {
+                    messageId: generateRandomId(),
+                    messageContent: input,
+                    role: "user",
+                    messageCreatedAt: new Date().toISOString(),
+                    messageTimestamp: Date.now(),
+                };
+                set((state) => ({ messages: [...state.messages, userMsg], isLoading: true }));
 
-                if (!reader) return;
-                const newMessageId = generateRandomId()
-                set({
-                    messages: [...get().messages, {
-                        messageId: newMessageId,
-                        messageContent: '',
-                        role: 'chatbot',
-                        messageCreatedAt: new Date().toISOString(),
-                        messageTimestamp: Date.now()
-                    }]
-                })
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+                const botMsgId = generateRandomId();
+                const botMsg: Message = {
+                    messageId: botMsgId,
+                    messageContent: "",
+                    role: "chatbot",
+                    messageCreatedAt: new Date().toISOString(),
+                    messageTimestamp: Date.now(),
+                };
+                set((state) => ({ messages: [...state.messages, botMsg] }));
 
-                    const chunk = decoder.decode(value, { stream: true });
-                    const lines = chunk.split('\n');
+                const historyLines = get()
+                    .messages
+                    .slice(-10)
+                    .map((m) => `${m.role}: ${m.messageContent}`);
 
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed || trimmed === 'data: [DONE]') continue;
+                const llm = createAgentLLM(get().config);
+                const toolExecutor = createKanbanToolExecutor();
+                const agent = new ReActAgent(llm, toolExecutor);
 
-                        if (trimmed.startsWith('data: ')) {
-                            try {
-                                const json = JSON.parse(trimmed.slice(6));
-                                // 假设后端结构是 { choices: [{ delta: { content: "..." } }] }
-                                const content = json.choices[0]?.delta?.content || "";
-
-                                fullContent += content;
-
-                                set({ messages: get().messages.map(msg => msg.messageId === newMessageId ? { ...msg, messageContent: fullContent } : msg) })
-                                // 实时更新状态，触发 UI 重新渲染
-                            } catch (e) {
-                                console.error("解析碎片失败", e);
-                            }
-                        }
-                    }
+                try {
+                    const answer = (await agent.run(input, historyLines)) ?? "";
+                    set((state) => ({
+                        messages: state.messages.map((m) =>
+                            m.messageId === botMsgId
+                                ? { ...m, messageContent: answer }
+                                : m
+                        ),
+                    }));
+                } finally {
+                    set({ isLoading: false });
                 }
+            },
 
-            }
+            getContext: (contextLength: number) => sliceContext(get().messages, contextLength),
+
+            clearMessages: () => set({ messages: [] }),
         }),
-        { name: 'chatbot-storage' }
+        { name: "chatbot-storage" }
     )
-)
+);

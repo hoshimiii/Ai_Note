@@ -17,9 +17,8 @@ interface ChatPanelProps {
 
 export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
     // useChat 会自动处理消息状态、输入框状态、以及流式请求
-    const { usertoken, messages, handleSubmit, getcontext, isLoading, getresponse } = useChatbot();
+    const { messages, handleSubmit, isLoading } = useChatbot();
     const scrollRef = useRef<HTMLDivElement>(null);
-    const { chatbotApi, baseurl } = useChatbot();
     // 自动滚动逻辑：每当有新消息（包括流式输出的字）时，滚动到底部
     useEffect(() => {
         // console.log(activeChatbotId)
@@ -112,7 +111,6 @@ export function ChatPanel({ activeChatbotId, FloatMode }: ChatPanelProps) {
                             if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
                                 handleSubmit(e, inputRef.current?.value ?? '');
-                                getresponse(getcontext(messages, 10), usertoken, baseurl);
                                 if (inputRef.current) {
                                     inputRef.current.value = '';
                                 }
