@@ -33,9 +33,9 @@ export function ChatPanel({ activeChatbotId: _activeChatbotId, FloatMode }: Chat
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     return (
-        <div className={cn(FloatMode !== 2 ? "flex flex-col h-full bg-background" : "flex flex-col w-full h-full bg-background")}>
+        <div className="flex h-full min-h-0 flex-col bg-background">
             {/* 1. 消息滚动区域 */}
-            <ScrollArea ref={scrollRef} className={cn(FloatMode !== 2 ? "flex-1 p-4 h-[60vh]" : "flex-1 p-4 h-[30vh]")}>
+            <ScrollArea ref={scrollRef} className="min-h-0 flex-1 p-4">
                 {messages.length === 0 && (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-2 opacity-50 mt-20">
                         <Bot size={40} />
@@ -100,7 +100,7 @@ export function ChatPanel({ activeChatbotId: _activeChatbotId, FloatMode }: Chat
             </ScrollArea>
 
             {/* 2. 输入区域 */}
-            <div className="p-4 border-t bg-background">
+            <div className="shrink-0 border-t bg-background p-4">
                 <form
                     onSubmit={(e) => handleSubmit(e, inputRef.current?.value ?? '')}
                     className="relative flex items-center gap-2">

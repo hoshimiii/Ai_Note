@@ -2,9 +2,7 @@ import { generateRandomId } from "@/components/utils/RandomGenerator";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { sliceContext, type LLMConfig, type ApiMessage } from "@/services/LLMService";
-import { createAgentLLM } from "@/agent/Agent_LLM";
-import ReActAgent from "@/agent/ReActAgent/main";
-import { createKanbanToolExecutor } from "@/agent/tools/kanbantools";
+import { runLangChainAgent } from "@/agent/langchain/runner";
 
 export type Message = {
     messageId: string;
@@ -32,6 +30,7 @@ export interface ChatbotState {
     sendMessage: (input: string) => Promise<void>;
     getContext: (contextLength: number) => ApiMessage[];
     clearMessages: () => void;
+    resetChatbot: () => void;
 }
 
 export const useChatbot = create<ChatbotState>()(
@@ -43,7 +42,9 @@ export const useChatbot = create<ChatbotState>()(
             config: {
                 baseurl: "https://api.siliconflow.cn/v1/chat/completions",
                 model: "deepseek-ai/DeepSeek-V3.2",
-                usertoken: "sk-vnasjeozmivbxcsjqvijtutshvncclxzwdhrcycolkladrzo",
+                usertoken: "",
+                temperature: 0.7,
+                userRules: "",
             },
             messages: [],
             input: "",
@@ -89,12 +90,8 @@ export const useChatbot = create<ChatbotState>()(
                     .slice(-10)
                     .map((m) => `${m.role}: ${m.messageContent}`);
 
-                const llm = createAgentLLM(get().config);
-                const toolExecutor = createKanbanToolExecutor();
-                const agent = new ReActAgent(llm, toolExecutor);
-
                 try {
-                    const answer = (await agent.run(input, historyLines, {
+                    const answer = await runLangChainAgent(get().config, input, historyLines, {
                         onTrace: ({ step, phase, content }) => {
                             const title =
                                 phase === "thought"
@@ -115,12 +112,19 @@ export const useChatbot = create<ChatbotState>()(
                                 ],
                             }));
                         },
-                    })) ?? "";
+                    });
                     set((state) => ({
                         messages: state.messages.map((m) =>
                             m.messageId === botMsgId
                                 ? { ...m, messageContent: answer }
                                 : m
+                        ),
+                    }));
+                } catch (e) {
+                    const errMsg = e instanceof Error ? e.message : String(e);
+                    set((state) => ({
+                        messages: state.messages.map((m) =>
+                            m.messageId === botMsgId ? { ...m, messageContent: `错误: ${errMsg}` } : m
                         ),
                     }));
                 } finally {
@@ -131,6 +135,13 @@ export const useChatbot = create<ChatbotState>()(
             getContext: (contextLength: number) => sliceContext(get().messages, contextLength),
 
             clearMessages: () => set({ messages: [] }),
+            resetChatbot: () =>
+                set({
+                    chatbotId: generateRandomId(),
+                    messages: [],
+                    input: "",
+                    isLoading: false,
+                }),
         }),
         { name: "chatbot-storage" }
     )

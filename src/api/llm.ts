@@ -4,6 +4,8 @@ export interface LLMConfig {
     baseurl: string;
     usertoken: string;
     model: string;
+    temperature?: number;
+    userRules?: string;
 }
 
 export const fetchLLMStream = async (

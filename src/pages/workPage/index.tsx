@@ -1,5 +1,5 @@
 import { useWorkSpace } from "@/store/kanban";
-import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Outlet, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { DeleteDialog } from "@/components/items/DeleteDialog";
@@ -16,6 +16,8 @@ import { generateRandomId } from "@/components/utils/RandomGenerator";
 import { ChatController } from "@/components/ChatBot/ChatBotWindow";
 import { type Mission as MissionType } from "@/store/kanban";
 import { NoteItem } from "@/components/Note";
+import { AgentSettingsPanel } from "@/components/AgentSettings/AgentSettingsPanel";
+import { Settings } from "lucide-react";
 
 
 
@@ -55,6 +57,7 @@ export const WorkPage = () => {
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const preMissionIdRef = useRef<string | null>(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -281,7 +284,13 @@ export const WorkPage = () => {
                                 });
                             }}>Create New Board</Button>
                         </SidebarContent>
+                        <SidebarFooter className="mt-auto">
+                            <Button variant="ghost" size="icon" className="cursor-pointer" onClick={() => setSettingsOpen(true)}>
+                                <Settings className="size-4" />
+                            </Button>
+                        </SidebarFooter>
                     </Sidebar>
+                    <AgentSettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
 
                     <main className={cn("flex-1 w-full transition-all duration-200", isPreviewing ? "opacity-50 scale-95 blur-in-sm" : "opacity-100 scale-95 blur-0")}>
                         <SidebarTrigger className="bg-gray-200 w-[20px] h-[20px]" />
