@@ -1,4 +1,4 @@
-# React + TypeScript + Vite
+# React + TypeScript + Vite + Nextjs
 
 通过vercel部署对应nextjs项目在：ai-note-online-jyn5-git-dev-hoshimiiis-projects.vercel.app
 
