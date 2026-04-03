@@ -1,6 +1,7 @@
-# React + TypeScript + Vite + Nextjs
+# React + TypeScript + Vite + Nextjs + mcp + Agent
 
-通过vercel部署对应nextjs项目在：[ai-note-online-jyn5-git-dev-hoshimiiis-projects.vercel.app](https://ai-note-online-jyn5-3o8mwylq5-hoshimiiis-projects.vercel.app/)
+通过vercel部署对应nextjs项目在：[ai-note-online-jyn5-git-mcp-ver-hoshimiiis-projects.vercel.app](ai-note-online-jyn5-git-mcp-ver-hoshimiiis-projects.vercel.app)
+                      
 
 由于主要使用zustand进行本地存储，多点登录会不同步，可通过保存网页缓存进行迁移
 
